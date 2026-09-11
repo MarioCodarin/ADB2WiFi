@@ -6,6 +6,7 @@ struct PopoverRootView: View {
     @Bindable var store: DeviceStore
     var coordinator: ConnectionCoordinator
     var onQuit: () -> Void
+    var onChooseADB: () -> Void
 
     @State private var showingSettings = false
 
@@ -18,7 +19,7 @@ struct PopoverRootView: View {
     var body: some View {
         Group {
             if showingSettings {
-                SettingsPaneView(settings: settings, store: store) {
+                SettingsPaneView(settings: settings, store: store, onChooseADB: onChooseADB) {
                     showingSettings = false
                     Task { await store.refresh() }
                 }

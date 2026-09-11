@@ -6,6 +6,7 @@ import SwiftUI
 final class StatusItemController: NSObject, NSPopoverDelegate {
     private let statusItem: NSStatusItem
     private let popover: NSPopover
+    private let settings: AppSettings
     private let store: DeviceStore
 
     init(
@@ -14,6 +15,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         coordinator: ConnectionCoordinator,
         onQuit: @escaping () -> Void
     ) {
+        self.settings = settings
         self.store = store
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         popover = NSPopover()
@@ -42,7 +44,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             settings: settings,
             store: store,
             coordinator: coordinator,
-            onQuit: onQuit
+            onQuit: onQuit,
+            onChooseADB: { [weak self] in
+                self?.chooseADB()
+            }
         )
         .frame(width: 360)
         let hosting = NSHostingController(rootView: root)
@@ -59,6 +64,14 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     func popoverDidClose(_ notification: Notification) {
         store.isPopoverOpen = false
+    }
+
+    private func chooseADB() {
+        PopoverOpenPanel.present(from: popover) { [weak self] url in
+            if let url {
+                self?.settings.adbPathOverride = url
+            }
+        }
     }
 
     @objc

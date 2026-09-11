@@ -1,10 +1,10 @@
-import AppKit
 import ADB2WiFiCore
 import SwiftUI
 
 struct SettingsPaneView: View {
     @Bindable var settings: AppSettings
     @Bindable var store: DeviceStore
+    var onChooseADB: () -> Void
     var onDone: () -> Void
 
     private var resolvedURL: URL? {
@@ -35,7 +35,7 @@ struct SettingsPaneView: View {
                     )
                 )
                 .textFieldStyle(.roundedBorder)
-                Button("Choose…", action: chooseADB)
+                Button("Choose…", action: onChooseADB)
             }
             resolvedSection
             VStack(alignment: .leading, spacing: 4) {
@@ -78,23 +78,6 @@ struct SettingsPaneView: View {
             Text("ADB not found")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        }
-    }
-
-    private func chooseADB() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        let apply: (NSApplication.ModalResponse) -> Void = { response in
-            if response == .OK, let url = panel.url {
-                settings.adbPathOverride = url
-            }
-        }
-        if let window = NSApp.keyWindow {
-            panel.beginSheetModal(for: window, completionHandler: apply)
-        } else {
-            apply(panel.runModal())
         }
     }
 }
