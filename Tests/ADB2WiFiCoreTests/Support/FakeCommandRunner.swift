@@ -26,8 +26,41 @@ struct FakeCommandRunner: CommandRunning {
         state.lock.withLock { state.calls }
     }
 
+    var invokedCommands: [[String]] {
+        calls.map(\.arguments)
+    }
+
+    var tcpipSerials: [String] {
+        calls.compactMap { call in
+            let args = call.arguments
+            guard args.count >= 3, args[0] == "-s", args[2] == "tcpip" else { return nil }
+            return args[1]
+        }
+    }
+
+    var connectEndpoints: [String] {
+        calls.compactMap { call in
+            let args = call.arguments
+            guard args.count >= 2, args[0] == "connect" else { return nil }
+            return args[1]
+        }
+    }
+
+    var targetedSerials: [String] {
+        calls.compactMap { call in
+            let args = call.arguments
+            if args.count >= 2, args[0] == "-s" { return args[1] }
+            if args.count >= 2, args[0] == "connect" { return args[1] }
+            return nil
+        }
+    }
+
     init(handlers: [@Sendable ([String]) async throws -> CommandResult] = []) {
         state.handlers = handlers
+    }
+
+    func clearCalls() {
+        state.lock.withLock { state.calls.removeAll() }
     }
 
     func run(executable: URL, arguments: [String], timeout: Duration) async throws -> CommandResult {

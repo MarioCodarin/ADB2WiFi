@@ -22,6 +22,11 @@ public enum OperationState: Equatable, Sendable {
     case awaitingAddress(suggested: String?)
     case readyToUnplug
     case failed(AppError)
+
+    public var isAwaitingAddress: Bool {
+        if case .awaitingAddress = self { return true }
+        return false
+    }
 }
 
 public struct Transport: Equatable, Sendable {
