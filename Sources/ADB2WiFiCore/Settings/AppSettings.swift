@@ -9,6 +9,7 @@ public protocol DefaultsStorage: AnyObject {
 
 extension UserDefaults: DefaultsStorage {}
 
+@MainActor
 @Observable
 public final class AppSettings {
     public static let adbPathOverrideKey = "adbPathOverride"
