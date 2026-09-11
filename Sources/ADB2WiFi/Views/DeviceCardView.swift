@@ -6,6 +6,7 @@ struct DeviceCardView: View {
     var onConnect: () -> Void = {}
     var onRetry: () -> Void = {}
     var onContinue: (String) -> Void = { _ in }
+    var onDisconnect: () -> Void = {}
 
     @State private var addressText = ""
 
@@ -56,9 +57,12 @@ struct DeviceCardView: View {
         case .awaitingAddress:
             addressPromptBody
         case .readyToUnplug:
-            Label("Ready—unplug USB.", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.subheadline.weight(.semibold))
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Ready—unplug USB.", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.subheadline.weight(.semibold))
+                disconnectButton
+            }
         case .failed(let error):
             VStack(alignment: .leading, spacing: 8) {
                 Text(displayedGuidance(error))
@@ -74,20 +78,37 @@ struct DeviceCardView: View {
     @ViewBuilder
     private var idleBody: some View {
         if device.usb?.state == .unauthorized {
-            Text("Unauthorized")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            guidanceWithRetry(.authorizationPending)
         } else if device.usb?.state == .offline {
-            Text("Offline")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            guidanceWithRetry(.deviceOffline)
         } else if device.isWiFiConnected {
-            Label("Wi-Fi connected", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.subheadline.weight(.semibold))
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Wi-Fi connected", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.subheadline.weight(.semibold))
+                disconnectButton
+            }
         } else if device.usb?.state == .device {
             Button("Connect via Wi-Fi", action: onConnect)
                 .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private var disconnectButton: some View {
+        Button("Disconnect", action: onDisconnect)
+            .buttonStyle(.bordered)
+            .help(ConnectionCoordinator.disconnectHelpText)
+            .accessibilityHint(ConnectionCoordinator.disconnectHelpText)
+    }
+
+    private func guidanceWithRetry(_ error: AppError) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(displayedGuidance(error))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Retry", action: onRetry)
+                .buttonStyle(.bordered)
         }
     }
 

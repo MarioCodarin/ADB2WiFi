@@ -3,18 +3,23 @@ import ADB2WiFiCore
 import SwiftUI
 
 @MainActor
-final class StatusItemController: NSObject {
+final class StatusItemController: NSObject, NSPopoverDelegate {
     private let statusItem: NSStatusItem
     private let popover: NSPopover
-    private let settings: AppSettings
+    private let store: DeviceStore
 
-    override init() {
-        settings = AppSettings()
+    init(
+        settings: AppSettings,
+        store: DeviceStore,
+        coordinator: ConnectionCoordinator,
+        onQuit: @escaping () -> Void
+    ) {
+        self.store = store
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         popover = NSPopover()
         super.init()
         configureStatusItem()
-        configurePopover()
+        configurePopover(settings: settings, store: store, coordinator: coordinator, onQuit: onQuit)
     }
 
     private func configureStatusItem() {
@@ -27,14 +32,33 @@ final class StatusItemController: NSObject {
         button.action = #selector(togglePopover(_:))
     }
 
-    private func configurePopover() {
-        let root = PopoverRootView(settings: settings)
-            .frame(width: 360)
+    private func configurePopover(
+        settings: AppSettings,
+        store: DeviceStore,
+        coordinator: ConnectionCoordinator,
+        onQuit: @escaping () -> Void
+    ) {
+        let root = PopoverRootView(
+            settings: settings,
+            store: store,
+            coordinator: coordinator,
+            onQuit: onQuit
+        )
+        .frame(width: 360)
         let hosting = NSHostingController(rootView: root)
         hosting.sizingOptions = [.preferredContentSize]
         popover.contentViewController = hosting
         popover.contentSize = NSSize(width: 360, height: 520)
         popover.behavior = .transient
+        popover.delegate = self
+    }
+
+    func popoverWillShow(_ notification: Notification) {
+        store.isPopoverOpen = true
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        store.isPopoverOpen = false
     }
 
     @objc

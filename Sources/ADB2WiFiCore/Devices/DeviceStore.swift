@@ -85,19 +85,30 @@ public final class DeviceStore {
         self.homeDirectory = homeDirectory
     }
 
+    public func makeClient() -> ADBClient? {
+        guard let executable = resolvedExecutable() else { return nil }
+        return ADBClient(executable: executable, runner: runner)
+    }
+
+    public func refreshVersion() async {
+        guard let client = makeClient() else {
+            adbVersion = nil
+            return
+        }
+        do {
+            adbVersion = try await client.version()
+        } catch is CancellationError {
+            return
+        } catch {
+            adbVersion = nil
+        }
+    }
+
     public func refresh() async {
-        guard let executable = ADBExecutable.resolve(
-            override: settings.adbPathOverride,
-            fileManager: fileManager,
-            pathEnv: pathEnv,
-            environment: environment,
-            homeDirectory: homeDirectory
-        ) else {
+        guard let client = makeClient() else {
             globalError = .missingADB
             return
         }
-
-        let client = ADBClient(executable: executable, runner: runner)
         do {
             let transports = try await client.devices()
             let physical = transports.filter { !$0.isEmulator }
@@ -170,6 +181,16 @@ public final class DeviceStore {
 
     public func device(for identity: DeviceIdentity) -> Device? {
         devices.first { $0.identity == identity }
+    }
+
+    private func resolvedExecutable() -> URL? {
+        ADBExecutable.resolve(
+            override: settings.adbPathOverride,
+            fileManager: fileManager,
+            pathEnv: pathEnv,
+            environment: environment,
+            homeDirectory: homeDirectory
+        )
     }
 
     private func waitForNextInterval() async {

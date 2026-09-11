@@ -283,6 +283,39 @@ func refreshDoesNotApplyDevicesWhenModelIsCancelled() async {
 }
 
 @Test @MainActor
+func refreshDoesNotFetchVersion() async {
+    let listing = """
+    List of devices attached
+    """
+    let runner = FakeCommandRunner(handlers: [
+        { _ in ok(listing) },
+    ])
+    let store = makeStore(runner: runner)
+    await store.refresh()
+    #expect(runner.calls.map(\.arguments) == [["devices", "-l"]])
+    #expect(store.adbVersion == nil)
+}
+
+@Test @MainActor
+func refreshVersionFetchesAdbVersion() async {
+    let runner = FakeCommandRunner(handlers: [
+        { _ in ok("Android Debug Bridge version 37.0.1\n") },
+    ])
+    let store = makeStore(runner: runner)
+    await store.refreshVersion()
+    #expect(store.adbVersion == "37.0.1")
+    #expect(runner.calls.map(\.arguments) == [["version"]])
+}
+
+@Test @MainActor
+func refreshVersionClearsWhenADBMissing() async {
+    let settings = AppSettings(storage: InMemoryDefaults())
+    let store = DeviceStore(settings: settings, runner: MissingADBRunner(), clock: ImmediateClock())
+    await store.refreshVersion()
+    #expect(store.adbVersion == nil)
+}
+
+@Test @MainActor
 func startPollsAtTwoSecondsOpenAndTenSecondsClosed() async {
     let listing = """
     List of devices attached

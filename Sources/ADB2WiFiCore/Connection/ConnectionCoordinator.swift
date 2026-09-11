@@ -10,29 +10,45 @@ public final class ConnectionCoordinator {
     private static let defaultPort = 5555
 
     private let store: DeviceStore
-    private let client: ADBClient
     private let clock: any Sleeping
+    private let clientProvider: @MainActor () -> ADBClient?
 
     private var connectingIdentities: Set<DeviceIdentity> = []
     private var lastAddressByIdentity: [DeviceIdentity: String] = [:]
 
-    public init(store: DeviceStore, client: ADBClient, clock: any Sleeping) {
+    public init(
+        store: DeviceStore,
+        clock: any Sleeping,
+        clientProvider: @escaping @MainActor () -> ADBClient?
+    ) {
         self.store = store
-        self.client = client
         self.clock = clock
+        self.clientProvider = clientProvider
+    }
+
+    public convenience init(store: DeviceStore, client: ADBClient, clock: any Sleeping) {
+        self.init(store: store, clock: clock, clientProvider: { client })
     }
 
     public convenience init(store: DeviceStore, client: ADBClient) {
         self.init(store: store, client: client, clock: DefaultSleeper())
     }
 
+    public convenience init(
+        store: DeviceStore,
+        clientProvider: @escaping @MainActor () -> ADBClient?
+    ) {
+        self.init(store: store, clock: DefaultSleeper(), clientProvider: clientProvider)
+    }
+
     public func connect(identity: DeviceIdentity, manualAddress: String? = nil) async {
         guard !connectingIdentities.contains(identity) else { return }
+        guard let client = requireClient(for: identity) else { return }
         connectingIdentities.insert(identity)
         defer { connectingIdentities.remove(identity) }
 
         do {
-            try await runConnect(identity: identity, manualAddress: manualAddress)
+            try await runConnect(identity: identity, manualAddress: manualAddress, client: client)
         } catch is CancellationError {
             return
         } catch {
@@ -44,6 +60,7 @@ public final class ConnectionCoordinator {
         guard var device = store.device(for: identity) else { return }
         let endpoint = device.network?.serial ?? lastAddressByIdentity[identity]
         guard let endpoint else { return }
+        guard let client = requireClient(for: identity) else { return }
         do {
             try await client.disconnect(endpoint: endpoint)
         } catch is CancellationError {
@@ -61,7 +78,7 @@ public final class ConnectionCoordinator {
         await connect(identity: identity, manualAddress: lastAddressByIdentity[identity])
     }
 
-    private func runConnect(identity: DeviceIdentity, manualAddress: String?) async throws {
+    private func runConnect(identity: DeviceIdentity, manualAddress: String?, client: ADBClient) async throws {
         guard let snapshot = store.device(for: identity) else {
             throw AppError.usbRemoved
         }
@@ -101,13 +118,13 @@ public final class ConnectionCoordinator {
 
         lastAddressByIdentity[identity] = endpoint
 
-        try await ensureUSBPresent(serial: usbSerial)
+        try await ensureUSBPresent(serial: usbSerial, client: client)
 
         update(identity) { $0.operation = .connecting(.enablingWifi) }
         try await client.tcpip(serial: usbSerial, port: Self.defaultPort)
 
         update(identity) { $0.operation = .connecting(.connecting) }
-        try await connectWithRetry(endpoint: endpoint)
+        try await connectWithRetry(endpoint: endpoint, client: client)
 
         update(identity) { $0.operation = .connecting(.verifying) }
         let remoteSerial = try await client.serialNo(serial: endpoint)
@@ -122,7 +139,7 @@ public final class ConnectionCoordinator {
     }
 
     /// USB unplug before `tcpip` is fatal; after `tcpip` the daemon restart is expected.
-    private func ensureUSBPresent(serial: String) async throws {
+    private func ensureUSBPresent(serial: String, client: ADBClient) async throws {
         let transports = try await client.devices()
         guard let usb = transports.first(where: { $0.serial == serial && !$0.isNetwork }) else {
             throw AppError.usbRemoved
@@ -138,7 +155,7 @@ public final class ConnectionCoordinator {
     }
 
     /// `adb connect` timeout is the remaining 20s budget, not a fresh 8s that can overrun it.
-    private func connectWithRetry(endpoint: String) async throws {
+    private func connectWithRetry(endpoint: String, client: ADBClient) async throws {
         let deadline = clock.now + Self.connectDeadline
         while true {
             let now = clock.now
@@ -163,6 +180,14 @@ public final class ConnectionCoordinator {
                 try await clock.sleep(for: delay)
             }
         }
+    }
+
+    private func requireClient(for identity: DeviceIdentity) -> ADBClient? {
+        guard let client = clientProvider() else {
+            fail(identity, .missingADB)
+            return nil
+        }
+        return client
     }
 
     private func update(_ identity: DeviceIdentity, _ body: (inout Device) -> Void) {

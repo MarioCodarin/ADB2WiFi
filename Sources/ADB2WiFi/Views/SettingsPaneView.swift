@@ -1,9 +1,20 @@
+import AppKit
 import ADB2WiFiCore
 import SwiftUI
 
 struct SettingsPaneView: View {
     @Bindable var settings: AppSettings
+    @Bindable var store: DeviceStore
     var onDone: () -> Void
+
+    private var resolvedURL: URL? {
+        ADBExecutable.resolve(
+            override: settings.adbPathOverride,
+            fileManager: FileManager.default,
+            pathEnv: ProcessInfo.processInfo.environment["PATH"] ?? "",
+            environment: ProcessInfo.processInfo.environment
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -12,17 +23,28 @@ struct SettingsPaneView: View {
             Text("ADB executable")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            TextField(
-                "Path to adb",
-                text: Binding(
-                    get: { settings.adbPathOverride?.path ?? "" },
-                    set: { newValue in
-                        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                        settings.adbPathOverride = trimmed.isEmpty ? nil : URL(fileURLWithPath: trimmed)
-                    }
+            HStack(spacing: 8) {
+                TextField(
+                    "Path to adb",
+                    text: Binding(
+                        get: { settings.adbPathOverride?.path ?? "" },
+                        set: { newValue in
+                            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                            settings.adbPathOverride = trimmed.isEmpty ? nil : URL(fileURLWithPath: trimmed)
+                        }
+                    )
                 )
-            )
-            .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.roundedBorder)
+                Button("Choose…", action: chooseADB)
+            }
+            resolvedSection
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Wi-Fi ADB requires a reachable shared network.")
+                Text("Use it only on a trusted network.")
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
             Spacer()
             HStack {
                 Spacer()
@@ -31,5 +53,48 @@ struct SettingsPaneView: View {
             }
         }
         .padding(14)
+        .onAppear {
+            Task { await store.refreshVersion() }
+        }
+        .onChange(of: settings.adbPathOverride) { _, _ in
+            Task { await store.refreshVersion() }
+        }
+    }
+
+    @ViewBuilder
+    private var resolvedSection: some View {
+        if let url = resolvedURL {
+            Text(url.path)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            if let version = store.adbVersion {
+                Text(version)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        } else {
+            Text("ADB not found")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func chooseADB() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        let apply: (NSApplication.ModalResponse) -> Void = { response in
+            if response == .OK, let url = panel.url {
+                settings.adbPathOverride = url
+            }
+        }
+        if let window = NSApp.keyWindow {
+            panel.beginSheetModal(for: window, completionHandler: apply)
+        } else {
+            apply(panel.runModal())
+        }
     }
 }

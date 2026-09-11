@@ -69,8 +69,26 @@ public enum AppError: Equatable, Error, Sendable {
     case identityMismatch
     case adbOutput(String)
     public var guidance: String {
-        // Concise per-case copy is filled in Task 8.
-        ""
+        switch self {
+        case .missingADB:
+            "ADB was not found. Choose the executable in Settings. Homebrew installs it at /opt/homebrew/bin/adb."
+        case .authorizationPending:
+            "Authorize USB debugging on the phone, then tap Retry."
+        case .deviceOffline:
+            "The device is offline. Replug USB and check USB debugging."
+        case .missingWiFiAddress:
+            "No Wi-Fi IPv4 address found. Join a network, or enter the address."
+        case .unreachableEndpoint:
+            "Could not reach the phone over Wi-Fi. Same network? Then Retry."
+        case .usbRemoved:
+            "USB was unplugged before Wi-Fi ADB was enabled. Replug and Retry."
+        case .timeout:
+            "Timed out waiting for Wi-Fi ADB. Retry while USB is still connected."
+        case .identityMismatch:
+            "Connected endpoint is a different device. Disconnect it and Retry."
+        case .adbOutput(let output):
+            output.isEmpty ? "ADB returned an unexpected error." : output
+        }
     }
 }
 

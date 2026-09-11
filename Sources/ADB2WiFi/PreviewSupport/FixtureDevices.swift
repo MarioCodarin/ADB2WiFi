@@ -2,17 +2,9 @@ import ADB2WiFiCore
 import Foundation
 
 enum FixtureDevices {
-    /// DEBUG builds always show fixtures. Release builds require `ADB2WIFI_FIXTURES=1`.
-    /// Task 1 has no live DeviceStore, so the popover uses `catalog` regardless.
+    /// Fixture catalog is opt-in. Debug builds talk to live ADB unless this is set.
     static var isEnabled: Bool {
-        if ProcessInfo.processInfo.environment["ADB2WIFI_FIXTURES"] == "1" {
-            return true
-        }
-        #if DEBUG
-        return true
-        #else
-        return false
-        #endif
+        ProcessInfo.processInfo.environment["ADB2WIFI_FIXTURES"] == "1"
     }
 
     static let empty: [Device] = []
