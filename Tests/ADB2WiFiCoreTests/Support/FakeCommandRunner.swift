@@ -12,6 +12,7 @@ struct FakeCommandRunner: CommandRunning {
         let lock = NSLock()
         var calls: [Call] = []
         var handlers: [@Sendable ([String]) async throws -> CommandResult] = []
+        var fallback: (@Sendable ([String]) async throws -> CommandResult)?
         var nextHandler = 0
     }
 
@@ -36,6 +37,21 @@ struct FakeCommandRunner: CommandRunning {
             guard args.count >= 3, args[0] == "-s", args[2] == "tcpip" else { return nil }
             return args[1]
         }
+    }
+
+    var tcpipCount: Int { tcpipSerials.count }
+
+    var disconnectEndpoints: [String] {
+        calls.compactMap { call in
+            let args = call.arguments
+            guard args.count >= 2, args[0] == "disconnect" else { return nil }
+            return args[1]
+        }
+    }
+
+    var fallback: (@Sendable ([String]) async throws -> CommandResult)? {
+        get { state.lock.withLock { state.fallback } }
+        nonmutating set { state.lock.withLock { state.fallback = newValue } }
     }
 
     var connectEndpoints: [String] {
@@ -64,9 +80,12 @@ struct FakeCommandRunner: CommandRunning {
     }
 
     func run(executable: URL, arguments: [String], timeout: Duration) async throws -> CommandResult {
-        let handler = dequeueHandler(executable: executable, arguments: arguments, timeout: timeout)
+        let (handler, fallback) = dequeueHandler(executable: executable, arguments: arguments, timeout: timeout)
         if let handler {
             return try await handler(arguments)
+        }
+        if let fallback {
+            return try await fallback(arguments)
         }
         return CommandResult(exitCode: 0, stdout: "", stderr: "")
     }
@@ -75,13 +94,18 @@ struct FakeCommandRunner: CommandRunning {
         executable: URL,
         arguments: [String],
         timeout: Duration
-    ) -> (@Sendable ([String]) async throws -> CommandResult)? {
+    ) -> (
+        (@Sendable ([String]) async throws -> CommandResult)?,
+        (@Sendable ([String]) async throws -> CommandResult)?
+    ) {
         state.lock.withLock {
             state.calls.append(Call(executable: executable, arguments: arguments, timeout: timeout))
-            guard state.nextHandler < state.handlers.count else { return nil }
-            let handler = state.handlers[state.nextHandler]
-            state.nextHandler += 1
-            return handler
+            if state.nextHandler < state.handlers.count {
+                let handler = state.handlers[state.nextHandler]
+                state.nextHandler += 1
+                return (handler, nil)
+            }
+            return (nil, state.fallback)
         }
     }
 }

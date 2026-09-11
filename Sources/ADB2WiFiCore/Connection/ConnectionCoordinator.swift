@@ -2,6 +2,9 @@ import Foundation
 
 @MainActor
 public final class ConnectionCoordinator {
+    public static let disconnectHelpText =
+        "Disconnects this computer from the phone’s Wi-Fi ADB endpoint. It does not disable the phone’s TCP listener."
+
     private static let connectDeadline: Duration = .seconds(20)
     private static let retryDelay: Duration = .milliseconds(500)
     private static let defaultPort = 5555
@@ -88,6 +91,8 @@ public final class ConnectionCoordinator {
             endpoint = parsed
         } else if let unambiguous = WiFiAddressParser.unambiguous(addresses) {
             endpoint = "\(unambiguous.ipv4):\(Self.defaultPort)"
+        } else if addresses.isEmpty {
+            throw AppError.missingWiFiAddress
         } else {
             let suggested = Self.suggestedIPv4(from: addresses)
             update(identity) { $0.operation = .awaitingAddress(suggested: suggested) }
@@ -95,6 +100,8 @@ public final class ConnectionCoordinator {
         }
 
         lastAddressByIdentity[identity] = endpoint
+
+        try await ensureUSBPresent(serial: usbSerial)
 
         update(identity) { $0.operation = .connecting(.enablingWifi) }
         try await client.tcpip(serial: usbSerial, port: Self.defaultPort)
@@ -114,11 +121,27 @@ public final class ConnectionCoordinator {
         }
     }
 
+    /// USB unplug before `tcpip` is fatal; after `tcpip` the daemon restart is expected.
+    private func ensureUSBPresent(serial: String) async throws {
+        let transports = try await client.devices()
+        guard let usb = transports.first(where: { $0.serial == serial && !$0.isNetwork }) else {
+            throw AppError.usbRemoved
+        }
+        switch usb.state {
+        case .unauthorized:
+            throw AppError.authorizationPending
+        case .offline, .unknown:
+            throw AppError.deviceOffline
+        case .device:
+            break
+        }
+    }
+
     /// `adb connect` timeout is the remaining 20s budget, not a fresh 8s that can overrun it.
     private func connectWithRetry(endpoint: String) async throws {
-        let deadline = ContinuousClock.now + Self.connectDeadline
+        let deadline = clock.now + Self.connectDeadline
         while true {
-            let now = ContinuousClock.now
+            let now = clock.now
             if now >= deadline {
                 throw AppError.unreachableEndpoint
             }
@@ -131,7 +154,7 @@ public final class ConnectionCoordinator {
             } catch ADBError.timeout {
                 throw ADBError.timeout
             } catch {
-                let after = ContinuousClock.now
+                let after = clock.now
                 if after >= deadline {
                     throw AppError.unreachableEndpoint
                 }

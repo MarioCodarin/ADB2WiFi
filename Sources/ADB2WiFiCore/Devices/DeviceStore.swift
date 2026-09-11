@@ -3,6 +3,11 @@ import Observation
 
 public protocol Sleeping: Sendable {
     func sleep(for duration: Duration) async throws
+    var now: ContinuousClock.Instant { get }
+}
+
+extension Sleeping {
+    public var now: ContinuousClock.Instant { ContinuousClock().now }
 }
 
 struct DefaultSleeper: Sleeping {
