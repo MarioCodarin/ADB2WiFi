@@ -18,6 +18,11 @@ mkdir -p "${app}/Contents/MacOS" "${app}/Contents/Resources"
 cp "${binary}" "${app}/Contents/MacOS/ADB2WiFi"
 strip -x "${app}/Contents/MacOS/ADB2WiFi"
 cp Resources/Info.plist "${app}/Contents/Info.plist"
+if [[ ! -f Resources/AppIcon.icns ]]; then
+  echo "error: missing Resources/AppIcon.icns" >&2
+  exit 1
+fi
+cp Resources/AppIcon.icns "${app}/Contents/Resources/AppIcon.icns"
 printf 'APPL????' > "${app}/Contents/PkgInfo"
 chmod +x "${app}/Contents/MacOS/ADB2WiFi"
 

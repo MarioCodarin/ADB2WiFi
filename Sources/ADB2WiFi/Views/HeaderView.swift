@@ -8,6 +8,9 @@ struct HeaderView: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            LogoMark()
+                .foregroundStyle(Theme.accent)
+                .frame(width: 16, height: 16)
             Text("ADB2WiFi")
                 .font(.headline)
             Spacer()

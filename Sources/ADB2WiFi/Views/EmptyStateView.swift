@@ -3,12 +3,15 @@ import SwiftUI
 struct EmptyStateView: View {
     var body: some View {
         VStack(spacing: 8) {
-            Image(systemName: "cable.connector")
-                .font(.largeTitle)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
+            LogoMark()
+                .foregroundStyle(Theme.accent)
+                .frame(width: 36, height: 36)
             Text("Plug in an Android device")
                 .font(.headline)
+                .multilineTextAlignment(.center)
+            Text("Unplug when the card says ready.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Text("Enable USB debugging in Developer options, then accept the authorization prompt on the phone.")
                 .font(.subheadline)

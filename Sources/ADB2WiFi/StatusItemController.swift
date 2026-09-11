@@ -26,8 +26,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     private func configureStatusItem() {
         guard let button = statusItem.button else { return }
-        let image = NSImage(systemSymbolName: "iphone", accessibilityDescription: "ADB2WiFi")
-        image?.isTemplate = true
+        let image = LogoMark.menuBarTemplate()
+        image.accessibilityDescription = "ADB2WiFi"
         button.image = image
         button.toolTip = "ADB2WiFi"
         button.target = self

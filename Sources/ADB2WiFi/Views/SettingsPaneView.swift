@@ -56,6 +56,9 @@ struct SettingsPaneView: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             Spacer()
+            Text("ADB2WiFi · personal ADB utility")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
             HStack {
                 Spacer()
                 Button("Done", action: onDone)
