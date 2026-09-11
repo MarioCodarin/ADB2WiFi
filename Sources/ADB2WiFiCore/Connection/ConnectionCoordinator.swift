@@ -74,8 +74,9 @@ public final class ConnectionCoordinator {
         store.update(device)
     }
 
+    /// Re-discovers the Wi-Fi IPv4 over USB. `lastAddressByIdentity` is disconnect-only.
     public func retry(identity: DeviceIdentity) async {
-        await connect(identity: identity, manualAddress: lastAddressByIdentity[identity])
+        await connect(identity: identity)
     }
 
     private func runConnect(identity: DeviceIdentity, manualAddress: String?, client: ADBClient) async throws {

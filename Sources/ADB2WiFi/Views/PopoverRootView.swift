@@ -45,8 +45,8 @@ struct PopoverRootView: View {
 
     private var deviceList: some View {
         VStack(spacing: 0) {
-            HeaderView(deviceCount: devices.count, onRefresh: {
-                Task { await store.refresh() }
+            HeaderView(deviceCount: devices.count, isRefreshing: store.isRefreshing, onRefresh: {
+                Task { await store.refresh(userInitiated: true) }
             })
             Divider()
             if let error = store.globalError, !usingFixtures {

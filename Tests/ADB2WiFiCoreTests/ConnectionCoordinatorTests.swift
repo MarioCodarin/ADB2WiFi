@@ -472,3 +472,64 @@ func unreachableEndpointMapsToGuidance() async {
     #expect(!runner.connectEndpoints.isEmpty)
     #expect(runner.connectEndpoints.allSatisfy { $0 == "192.0.2.42:5555" })
 }
+
+private let wlan0NewLease = """
+1: lo    inet 127.0.0.1/8 ...
+12: wlan0    inet 192.0.2.99/24 ...
+14: rmnet_data0 inet 10.132.4.8/30 ...
+"""
+
+private final class AddressLookupCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func next() -> Int {
+        lock.withLock {
+            count += 1
+            return count
+        }
+    }
+}
+
+@Test @MainActor
+func retryRereadsWifiAddressInsteadOfReusingLastIP() async {
+    let lookups = AddressLookupCounter()
+    let runner = FakeCommandRunner()
+    runner.fallback = { arguments in
+        if arguments == ["devices", "-l"] {
+            return ok(pixelUSBListing)
+        }
+        if arguments.contains(where: { $0.contains("ip -o -4 addr show up") }) {
+            return ok(lookups.next() == 1 ? wlan0Only : wlan0NewLease)
+        }
+        if arguments.count >= 3, arguments[2] == "tcpip" {
+            return ok("restarting in TCP mode port: 5555\n")
+        }
+        if arguments.first == "connect" {
+            let endpoint = arguments[1]
+            if endpoint == "192.0.2.42:5555" {
+                throw ADBError.timeout
+            }
+            return ok("connected to \(endpoint)\n")
+        }
+        if arguments.contains(where: { $0.contains("getprop ro.serialno") }) {
+            return ok("TEST00000001\n")
+        }
+        if arguments.contains(where: { $0.contains("getprop ro.product.model") }) {
+            return ok("Pixel 8\n")
+        }
+        return ok("")
+    }
+    let (store, coordinator) = makeHarness(runner: runner)
+    await store.refresh()
+
+    await coordinator.connect(identity: pixel.identity)
+    #expect(store.device(for: pixel.identity)?.operation == .failed(.timeout))
+    #expect(runner.connectEndpoints == ["192.0.2.42:5555"])
+
+    await coordinator.retry(identity: pixel.identity)
+    let device = store.device(for: pixel.identity)
+    #expect(device?.isWiFiConnected == true)
+    #expect(device?.network?.serial == "192.0.2.99:5555")
+    #expect(device?.operation == .readyToUnplug)
+    #expect(runner.connectEndpoints == ["192.0.2.42:5555", "192.0.2.99:5555"])
+}

@@ -52,7 +52,16 @@ import Testing
         network: Transport(serial: "192.0.2.42:5555", state: .device, verified: true),
         operation: .readyToUnplug
     )
-    #expect(device.accessibilityValue == "USB and Wi-Fi, Ready, unplug USB")
+    #expect(device.accessibilityValue == "USB and Wi-Fi, 192.0.2.42:5555, Ready, unplug USB")
+}
+
+@Test func accessibilityValueForWiFiOnlyIncludesEndpoint() {
+    let device = Device(
+        identity: DeviceIdentity(serialNo: "WIFIONLY01"),
+        model: "Pixel 6",
+        network: Transport(serial: "198.51.100.55:5555", state: .device, verified: true)
+    )
+    #expect(device.accessibilityValue == "Wi-Fi, 198.51.100.55:5555, Wi-Fi connected")
 }
 
 @Test func accessibilityValueForIdleUSBIsTransportOnly() {

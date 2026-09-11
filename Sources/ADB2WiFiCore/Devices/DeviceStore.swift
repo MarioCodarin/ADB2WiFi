@@ -22,6 +22,7 @@ public final class DeviceStore {
     public private(set) var devices: [Device] = []
     public private(set) var adbVersion: String?
     public private(set) var globalError: AppError?
+    public private(set) var isRefreshing = false
     public var isPopoverOpen = false {
         didSet {
             if oldValue != isPopoverOpen {
@@ -42,6 +43,7 @@ public final class DeviceStore {
     @ObservationIgnored private var modelBySerialNo: [String: String] = [:]
     @ObservationIgnored private var pollTask: Task<Void, Never>?
     @ObservationIgnored private var intervalWaitTask: Task<Void, Error>?
+    @ObservationIgnored private var userRefreshCount = 0
 
     public convenience init(settings: AppSettings, runner: any CommandRunning) {
         self.init(
@@ -104,7 +106,17 @@ public final class DeviceStore {
         }
     }
 
-    public func refresh() async {
+    public func refresh(userInitiated: Bool = false) async {
+        if userInitiated {
+            userRefreshCount += 1
+            isRefreshing = true
+        }
+        defer {
+            if userInitiated {
+                userRefreshCount -= 1
+                if userRefreshCount == 0 { isRefreshing = false }
+            }
+        }
         guard let client = makeClient() else {
             globalError = .missingADB
             return

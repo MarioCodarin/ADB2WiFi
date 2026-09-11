@@ -395,3 +395,130 @@ func startPollsAtTwoSecondsOpenAndTenSecondsClosed() async {
     #expect(clock.durations.last == .seconds(10))
     store.stop()
 }
+
+/// Parks `devices -l` until `release()`.
+private final class RefreshGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var arrivedWaiters: [CheckedContinuation<Void, Never>] = []
+    private var arrived = false
+    private var proceedWaiters: [CheckedContinuation<Void, Never>] = []
+    private var proceed = false
+
+    func waitToProceed() async {
+        let pendingArrived: [CheckedContinuation<Void, Never>] = lock.withLock {
+            arrived = true
+            let pending = arrivedWaiters
+            arrivedWaiters.removeAll()
+            return pending
+        }
+        pendingArrived.forEach { $0.resume() }
+        await withCheckedContinuation { continuation in
+            let alreadyReleased = lock.withLock { () -> Bool in
+                if proceed { return true }
+                proceedWaiters.append(continuation)
+                return false
+            }
+            if alreadyReleased { continuation.resume() }
+        }
+    }
+
+    func waitUntilArrived() async {
+        await withCheckedContinuation { continuation in
+            let alreadyArrived = lock.withLock { () -> Bool in
+                if arrived { return true }
+                arrivedWaiters.append(continuation)
+                return false
+            }
+            if alreadyArrived { continuation.resume() }
+        }
+    }
+
+    func release() {
+        let pending: [CheckedContinuation<Void, Never>] = lock.withLock {
+            proceed = true
+            let waiters = proceedWaiters
+            proceedWaiters.removeAll()
+            return waiters
+        }
+        pending.forEach { $0.resume() }
+    }
+}
+
+@Test @MainActor
+func userInitiatedRefreshSetsIsRefreshingUntilComplete() async {
+    let gate = RefreshGate()
+    let listing = """
+    List of devices attached
+    """
+    let runner = FakeCommandRunner(handlers: [
+        { _ in
+            await gate.waitToProceed()
+            return ok(listing)
+        },
+    ])
+    let store = makeStore(runner: runner)
+    #expect(store.isRefreshing == false)
+
+    let task = Task { await store.refresh(userInitiated: true) }
+    await gate.waitUntilArrived()
+    #expect(store.isRefreshing == true)
+    gate.release()
+    await task.value
+    #expect(store.isRefreshing == false)
+}
+
+@Test @MainActor
+func overlappingUserRefreshKeepsIsRefreshingUntilLastCompletes() async {
+    let first = RefreshGate()
+    let second = RefreshGate()
+    let listing = """
+    List of devices attached
+    """
+    let runner = FakeCommandRunner(handlers: [
+        { _ in
+            await first.waitToProceed()
+            return ok(listing)
+        },
+        { _ in
+            await second.waitToProceed()
+            return ok(listing)
+        },
+    ])
+    let store = makeStore(runner: runner)
+
+    let task1 = Task { await store.refresh(userInitiated: true) }
+    await first.waitUntilArrived()
+    let task2 = Task { await store.refresh(userInitiated: true) }
+    await second.waitUntilArrived()
+    #expect(store.isRefreshing == true)
+
+    first.release()
+    await task1.value
+    #expect(store.isRefreshing == true)
+
+    second.release()
+    await task2.value
+    #expect(store.isRefreshing == false)
+}
+
+@Test @MainActor
+func backgroundRefreshDoesNotSetIsRefreshing() async {
+    let gate = RefreshGate()
+    let listing = """
+    List of devices attached
+    """
+    let runner = FakeCommandRunner(handlers: [
+        { _ in
+            await gate.waitToProceed()
+            return ok(listing)
+        },
+    ])
+    let store = makeStore(runner: runner)
+
+    let task = Task { await store.refresh() }
+    await gate.waitUntilArrived()
+    #expect(store.isRefreshing == false)
+    gate.release()
+    await task.value
+    #expect(store.isRefreshing == false)
+}

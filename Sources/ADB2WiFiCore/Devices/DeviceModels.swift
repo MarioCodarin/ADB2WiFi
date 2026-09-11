@@ -124,7 +124,7 @@ extension Device {
 
     /// VoiceOver value: transport plus operation, including on-screen guidance.
     public var accessibilityValue: String {
-        [accessibilityTransport, accessibilityOperation]
+        [accessibilityTransport, network?.serial, accessibilityOperation]
             .compactMap { $0 }
             .joined(separator: ", ")
     }

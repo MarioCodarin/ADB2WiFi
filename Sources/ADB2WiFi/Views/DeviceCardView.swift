@@ -56,6 +56,12 @@ struct DeviceCardView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
+                if let endpoint = device.network?.serial {
+                    Text(endpoint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
             }
             Spacer(minLength: 8)
             HStack(spacing: 6) {
