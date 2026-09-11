@@ -122,6 +122,33 @@ import Testing
     #expect(merged.isEmpty)
 }
 
+@Test func verifiedWifiSurvivesEmptyPollThenNetworkReturns() {
+    var existing = Device.fixtureUSBAuthorized
+    existing.network = .init(serial: "192.0.2.42:5555", state: .device, verified: true)
+    existing.operation = .readyToUnplug
+
+    let empty = TransportMerger.merge(
+        existing: [existing], transports: [], identities: [:], models: [:]
+    )
+    #expect(empty.count == 1)
+    #expect(empty[0].usb == nil)
+    #expect(empty[0].network?.serial == "192.0.2.42:5555")
+    #expect(empty[0].network?.verified == true)
+    #expect(empty[0].operation == .readyToUnplug)
+
+    let net = ADBTransport(serial: "192.0.2.42:5555", state: .device, model: "Pixel_8")
+    let restored = TransportMerger.merge(
+        existing: empty,
+        transports: [net],
+        identities: ["192.0.2.42:5555": existing.identity],
+        models: [:]
+    )
+    #expect(restored.count == 1)
+    #expect(restored[0].usb == nil)
+    #expect(restored[0].isWiFiConnected)
+    #expect(restored[0].operation == .readyToUnplug)
+}
+
 @Test func preservesFailedAndAwaitingAddressWhenUSBDrops() {
     var awaiting = Device.fixtureUSBAuthorized
     awaiting.operation = .awaitingAddress(suggested: "192.0.2.42")

@@ -28,7 +28,7 @@ public enum TransportMerger {
                     identity: old.identity,
                     model: old.model,
                     usb: nil,
-                    network: nil,
+                    network: old.network,
                     operation: old.operation
                 ))
                 emitted.insert(old.identity)

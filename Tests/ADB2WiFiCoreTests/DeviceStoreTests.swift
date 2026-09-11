@@ -215,6 +215,74 @@ func refreshMapsRunnerFailureToADBOutput() async {
 }
 
 @Test @MainActor
+func refreshRequeriesIdentityWhenHostPortMovesToANewPhone() async {
+    let endpoint = "192.0.2.42:5555"
+    let networkListing = """
+    List of devices attached
+    \(endpoint)      device product:shiba model:Pixel_8
+    """
+    let emptyListing = """
+    List of devices attached
+    """
+    let runner = FakeCommandRunner(handlers: [
+        { _ in ok(networkListing) },
+        { _ in ok("PHONEA\n") },
+        { _ in ok("Pixel 8\n") },
+        { _ in ok(emptyListing) },
+        { _ in ok(networkListing) },
+        { _ in ok("PHONEB\n") },
+        { _ in ok("Pixel 9\n") },
+    ])
+    let store = makeStore(runner: runner)
+
+    await store.refresh()
+    #expect(store.devices.map(\.identity.serialNo) == ["PHONEA"])
+
+    await store.refresh()
+    #expect(store.devices.isEmpty)
+
+    await store.refresh()
+    #expect(store.devices.map(\.identity.serialNo) == ["PHONEB"])
+    #expect(store.devices[0].model == "Pixel 9")
+    #expect(store.devices[0].network?.serial == endpoint)
+    let serialNoCalls = runner.calls.filter { $0.arguments == ["-s", endpoint, "shell", "getprop ro.serialno"] }
+    #expect(serialNoCalls.count == 2)
+}
+
+@Test @MainActor
+func refreshDoesNotApplyDevicesWhenSerialNoIsCancelled() async {
+    let listing = """
+    List of devices attached
+    TEST00000001         device usb:1-1 model:Pixel_8
+    """
+    let runner = FakeCommandRunner(handlers: [
+        { _ in ok(listing) },
+        { _ in throw CancellationError() },
+    ])
+    let store = makeStore(runner: runner)
+    await store.refresh()
+    #expect(store.devices.isEmpty)
+    #expect(store.globalError == nil)
+}
+
+@Test @MainActor
+func refreshDoesNotApplyDevicesWhenModelIsCancelled() async {
+    let listing = """
+    List of devices attached
+    TEST00000001         device usb:1-1 model:Pixel_8
+    """
+    let runner = FakeCommandRunner(handlers: [
+        { _ in ok(listing) },
+        { _ in ok("TEST00000001\n") },
+        { _ in throw CancellationError() },
+    ])
+    let store = makeStore(runner: runner)
+    await store.refresh()
+    #expect(store.devices.isEmpty)
+    #expect(store.globalError == nil)
+}
+
+@Test @MainActor
 func startPollsAtTwoSecondsOpenAndTenSecondsClosed() async {
     let listing = """
     List of devices attached

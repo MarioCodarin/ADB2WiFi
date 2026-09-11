@@ -96,18 +96,24 @@ public final class DeviceStore {
         do {
             let transports = try await client.devices()
             let physical = transports.filter { !$0.isEmulator }
+            let presentSerials = Set(physical.map(\.serial))
+            identityByTransportSerial = identityByTransportSerial.filter { presentSerials.contains($0.key) }
             try Task.checkCancellation()
 
             for transport in physical where transport.state == .device {
                 if identityByTransportSerial[transport.serial] == nil {
-                    if let serialNo = try? await client.serialNo(serial: transport.serial), !serialNo.isEmpty {
+                    if let serialNo = try await ignoreGetpropFailure({
+                        try await client.serialNo(serial: transport.serial)
+                    }), !serialNo.isEmpty {
                         identityByTransportSerial[transport.serial] = DeviceIdentity(serialNo: serialNo)
                     }
                 }
                 let identity = identityByTransportSerial[transport.serial]
                     ?? DeviceIdentity(serialNo: transport.serial)
                 if modelBySerialNo[identity.serialNo] == nil {
-                    if let model = try? await client.model(serial: transport.serial), !model.isEmpty {
+                    if let model = try await ignoreGetpropFailure({
+                        try await client.model(serial: transport.serial)
+                    }), !model.isEmpty {
                         modelBySerialNo[identity.serialNo] = model
                     }
                 }
@@ -173,6 +179,16 @@ public final class DeviceStore {
             wait.cancel()
         }
         intervalWaitTask = nil
+    }
+
+    private func ignoreGetpropFailure(_ body: () async throws -> String) async throws -> String? {
+        do {
+            return try await body()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return nil
+        }
     }
 
     private func mapError(_ error: Error) -> AppError {
