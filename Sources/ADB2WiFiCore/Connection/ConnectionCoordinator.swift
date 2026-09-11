@@ -129,12 +129,24 @@ public final class ConnectionCoordinator {
         update(identity) { $0.operation = .connecting(.verifying) }
         let remoteSerial = try await client.serialNo(serial: endpoint)
         guard !remoteSerial.isEmpty, remoteSerial == capturedSerialNo else {
+            try await disconnectMismatchedEndpoint(endpoint, client: client)
             throw AppError.identityMismatch
         }
 
         update(identity) { device in
             device.network = Transport(serial: endpoint, state: .device, verified: true)
             device.operation = .readyToUnplug
+        }
+    }
+
+    /// Drop the foreign `adb connect` so Retry cannot hit `already connected to`.
+    private func disconnectMismatchedEndpoint(_ endpoint: String, client: ADBClient) async throws {
+        do {
+            try await client.disconnect(endpoint: endpoint)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // Still fail as identityMismatch; the connect must not remain sticky.
         }
     }
 

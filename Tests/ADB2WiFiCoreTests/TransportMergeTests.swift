@@ -149,6 +149,56 @@ import Testing
     #expect(restored[0].operation == .readyToUnplug)
 }
 
+@Test func usbPlusVerifiedWifiKeepsWifiWhenPollIsUSBOnly() {
+    var existing = Device.fixtureUSBAuthorized
+    existing.network = .init(serial: "192.0.2.42:5555", state: .device, verified: true)
+    existing.operation = .readyToUnplug
+    let usb = ADBTransport(serial: "TEST00000001", state: .device, model: "Pixel_8")
+    let merged = TransportMerger.merge(
+        existing: [existing],
+        transports: [usb],
+        identities: ["TEST00000001": existing.identity],
+        models: [:]
+    )
+    #expect(merged.count == 1)
+    #expect(merged[0].usb?.serial == "TEST00000001")
+    #expect(merged[0].network?.serial == "192.0.2.42:5555")
+    #expect(merged[0].network?.verified == true)
+    #expect(merged[0].isWiFiConnected)
+    #expect(merged[0].operation == .readyToUnplug)
+}
+
+@Test func resolvedNetworkIdentityMarksDeviceTransportVerified() {
+    let net = ADBTransport(serial: "192.0.2.42:5555", state: .device, model: "Pixel_8")
+    let merged = TransportMerger.merge(
+        existing: [],
+        transports: [net],
+        identities: ["192.0.2.42:5555": DeviceIdentity(serialNo: "TEST00000001")],
+        models: [:]
+    )
+    #expect(merged.count == 1)
+    #expect(merged[0].network?.serial == "192.0.2.42:5555")
+    #expect(merged[0].network?.verified == true)
+    #expect(merged[0].isWiFiConnected)
+}
+
+@Test func doesNotMarkUnauthorizedOrOfflineNetworkVerified() {
+    let unauthorized = ADBTransport(serial: "192.0.2.42:5555", state: .unauthorized)
+    let offline = ADBTransport(serial: "203.0.113.5:5555", state: .offline)
+    let merged = TransportMerger.merge(
+        existing: [],
+        transports: [unauthorized, offline],
+        identities: [
+            "192.0.2.42:5555": DeviceIdentity(serialNo: "SERIALA"),
+            "203.0.113.5:5555": DeviceIdentity(serialNo: "SERIALB"),
+        ],
+        models: [:]
+    )
+    #expect(merged.count == 2)
+    #expect(merged.allSatisfy { $0.network?.verified == false })
+    #expect(merged.allSatisfy { $0.isWiFiConnected == false })
+}
+
 @Test func preservesFailedAndAwaitingAddressWhenUSBDrops() {
     var awaiting = Device.fixtureUSBAuthorized
     awaiting.operation = .awaitingAddress(suggested: "192.0.2.42")

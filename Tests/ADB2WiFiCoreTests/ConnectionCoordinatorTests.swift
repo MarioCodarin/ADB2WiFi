@@ -209,12 +209,15 @@ func failedIdentityVerificationDoesNotMarkWifiConnected() async {
         { _ in ok("restarting in TCP mode port: 5555\n") },
         { _ in ok("connected to 192.0.2.42:5555\n") },
         { _ in ok("OTHER_SERIAL\n") },
+        { _ in ok("disconnected 192.0.2.42:5555\n") },
     ])
     let (store, coordinator) = makeHarness(runner: runner)
     await store.refresh()
 
     await coordinator.connect(identity: pixel.identity)
+    #expect(runner.disconnectEndpoints == ["192.0.2.42:5555"])
     #expect(store.device(for: pixel.identity)?.isWiFiConnected == false)
+    #expect(store.device(for: pixel.identity)?.network?.verified != true)
     #expect(store.device(for: pixel.identity)?.operation == .failed(.identityMismatch))
 }
 

@@ -73,14 +73,54 @@ public enum TransportMerger {
         Device(
             identity: identity,
             model: resolveModel(identity: identity, pair: pair, existing: existing, models: models),
-            usb: pair.usb.map { makeTransport($0, existing: existing?.usb) },
-            network: pair.network.map { makeTransport($0, existing: existing?.network) },
+            usb: pair.usb.map { makeTransport($0, existing: existing?.usb, identity: identity) },
+            network: resolveNetwork(pair: pair, existing: existing, identity: identity),
             operation: existing?.operation ?? .idle
         )
     }
 
-    private static func makeTransport(_ transport: ADBTransport, existing: Transport?) -> Transport {
-        let verified = existing?.serial == transport.serial && existing?.verified == true
+    /// USB-only polls must not drop a verified or in-flight Wi-Fi row; preserve-across-drop
+    /// only runs when *no* transport remains.
+    private static func resolveNetwork(
+        pair: TransportPair,
+        existing: Device?,
+        identity: DeviceIdentity
+    ) -> Transport? {
+        if let network = pair.network {
+            return makeTransport(network, existing: existing?.network, identity: identity)
+        }
+        if shouldKeepExistingNetwork(existing) {
+            return existing?.network
+        }
+        return nil
+    }
+
+    private static func shouldKeepExistingNetwork(_ existing: Device?) -> Bool {
+        guard let existing else { return false }
+        if existing.network?.verified == true {
+            return true
+        }
+        switch existing.operation {
+        case .connecting, .readyToUnplug, .failed:
+            return true
+        case .idle, .awaitingAddress:
+            return false
+        }
+    }
+
+    private static func makeTransport(
+        _ transport: ADBTransport,
+        existing: Transport?,
+        identity: DeviceIdentity
+    ) -> Transport {
+        let preserved = existing?.serial == transport.serial && existing?.verified == true
+        let identityResolved = identity.serialNo != transport.serial
+        let verified: Bool
+        if transport.isNetwork && transport.state == .device {
+            verified = preserved || identityResolved
+        } else {
+            verified = preserved
+        }
         return Transport(serial: transport.serial, state: transport.state, verified: verified)
     }
 

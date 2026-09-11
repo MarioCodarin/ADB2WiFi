@@ -8,6 +8,10 @@ private func ok(_ stdout: String, stderr: String = "", exitCode: Int32 = 0) -> C
     CommandResult(exitCode: exitCode, stdout: stdout, stderr: stderr)
 }
 
+private func failFastGetprop(_ arguments: [String]) async throws -> CommandResult {
+    throw ADBError.timeout
+}
+
 private struct MissingADBRunner: CommandRunning {
     func run(executable: URL, arguments: [String], timeout: Duration) async throws -> CommandResult {
         throw ADBError.missingExecutable
@@ -101,6 +105,8 @@ func refreshListsPhysicalDevicesUsingDevicesDashL() async {
     let pixel = store.devices.first { $0.identity.serialNo == "TEST00000001" }!
     #expect(pixel.usb?.serial == "TEST00000001")
     #expect(pixel.network?.serial == "192.0.2.42:5555")
+    #expect(pixel.network?.verified == true)
+    #expect(pixel.isWiFiConnected)
     #expect(pixel.model == "Pixel 8")
     #expect(store.devices.contains { $0.identity.serialNo == "TEST00000002" })
 }
@@ -212,6 +218,50 @@ func refreshMapsRunnerFailureToADBOutput() async {
         Issue.record("expected adbOutput, got \(String(describing: store.globalError))")
         return
     }
+}
+
+@Test @MainActor
+func refreshMarksNetworkVerifiedWhenGetpropResolvesIdentity() async {
+    let listing = """
+    List of devices attached
+    192.0.2.42:5555      device product:shiba model:Pixel_8
+    """
+    let runner = FakeCommandRunner(handlers: [
+        { _ in ok(listing) },
+        { _ in ok("TEST00000001\n") },
+        { _ in ok("Pixel 8\n") },
+    ])
+    let store = makeStore(runner: runner)
+    await store.refresh()
+
+    #expect(store.devices.count == 1)
+    let device = store.devices[0]
+    #expect(device.identity.serialNo == "TEST00000001")
+    #expect(device.network?.serial == "192.0.2.42:5555")
+    #expect(device.network?.state == .device)
+    #expect(device.network?.verified == true)
+    #expect(device.isWiFiConnected)
+}
+
+@Test @MainActor
+func refreshDoesNotMarkUnauthorizedOrOfflineNetworkVerified() async {
+    let listing = """
+    List of devices attached
+    192.0.2.42:5555      unauthorized
+    203.0.113.5:5555          offline
+    """
+    let runner = FakeCommandRunner(handlers: [
+        { _ in ok(listing) },
+        failFastGetprop,
+    ])
+    let store = makeStore(runner: runner)
+    await store.refresh()
+
+    #expect(store.globalError == nil)
+    #expect(store.devices.count == 2)
+    #expect(store.devices.allSatisfy { $0.network?.verified == false })
+    #expect(store.devices.allSatisfy { $0.isWiFiConnected == false })
+    #expect(runner.calls.map(\.arguments) == [["devices", "-l"]])
 }
 
 @Test @MainActor
