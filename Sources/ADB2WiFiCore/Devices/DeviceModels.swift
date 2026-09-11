@@ -90,6 +90,10 @@ public enum AppError: Equatable, Error, Sendable {
             output.isEmpty ? "ADB returned an unexpected error." : output
         }
     }
+
+    public var displayedGuidance: String {
+        guidance.isEmpty ? "Connection failed." : guidance
+    }
 }
 
 public struct ADBTransport: Equatable, Sendable {
@@ -117,4 +121,53 @@ extension Device {
         model: "Pixel 8",
         usb: Transport(serial: "TEST00000001", state: .device)
     )
+
+    /// VoiceOver value: transport plus operation, including on-screen guidance.
+    public var accessibilityValue: String {
+        [accessibilityTransport, accessibilityOperation]
+            .compactMap { $0 }
+            .joined(separator: ", ")
+    }
+
+    private var accessibilityTransport: String? {
+        switch (usb != nil, network != nil) {
+        case (true, true): "USB and Wi-Fi"
+        case (true, false): "USB"
+        case (false, true): "Wi-Fi"
+        case (false, false): nil
+        }
+    }
+
+    private var accessibilityOperation: String? {
+        switch operation {
+        case .idle:
+            if usb?.state == .unauthorized {
+                return "Unauthorized, \(AppError.authorizationPending.displayedGuidance)"
+            }
+            if usb?.state == .offline {
+                return "Offline, \(AppError.deviceOffline.displayedGuidance)"
+            }
+            if isWiFiConnected { return "Wi-Fi connected" }
+            return nil
+        case .connecting(let step):
+            return step.title
+        case .awaitingAddress:
+            return "Enter IPv4 address"
+        case .readyToUnplug:
+            return "Ready, unplug USB"
+        case .failed(let error):
+            return "Failed, \(error.displayedGuidance)"
+        }
+    }
+}
+
+extension ConnectionStep {
+    public var title: String {
+        switch self {
+        case .findingAddress: "Finding address"
+        case .enablingWifi: "Enabling Wi-Fi"
+        case .connecting: "Connecting"
+        case .verifying: "Verifying"
+        }
+    }
 }

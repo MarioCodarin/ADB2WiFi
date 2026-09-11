@@ -27,7 +27,7 @@ struct DeviceCardView: View {
             // Combine identity + status; keep buttons/fields as separate AX elements.
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(device.model), serial \(device.identity.shortSerial)")
-            .accessibilityValue(accessibilityValue)
+            .accessibilityValue(device.accessibilityValue)
 
             actionBody
         }
@@ -84,7 +84,7 @@ struct DeviceCardView: View {
                 .foregroundStyle(.green)
                 .font(.subheadline.weight(.semibold))
         case .failed(let error):
-            Text(displayedGuidance(error))
+            Text(error.displayedGuidance)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -151,7 +151,7 @@ struct DeviceCardView: View {
     }
 
     private func guidanceText(_ error: AppError) -> some View {
-        Text(displayedGuidance(error))
+        Text(error.displayedGuidance)
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -206,43 +206,6 @@ struct DeviceCardView: View {
         }
     }
 
-    private var accessibilityValue: String {
-        [transportAccessibility, operationAccessibility]
-            .compactMap { $0 }
-            .joined(separator: ", ")
-    }
-
-    private var transportAccessibility: String? {
-        switch (device.usb != nil, device.network != nil) {
-        case (true, true): "USB and Wi-Fi"
-        case (true, false): "USB"
-        case (false, true): "Wi-Fi"
-        case (false, false): nil
-        }
-    }
-
-    private var operationAccessibility: String? {
-        switch device.operation {
-        case .idle:
-            if device.usb?.state == .unauthorized { return "Unauthorized" }
-            if device.usb?.state == .offline { return "Offline" }
-            if device.isWiFiConnected { return "Wi-Fi connected" }
-            return nil
-        case .connecting(let step):
-            return step.title
-        case .awaitingAddress:
-            return "Enter IPv4 address"
-        case .readyToUnplug:
-            return "Ready, unplug USB"
-        case .failed:
-            return "Failed"
-        }
-    }
-
-    private func displayedGuidance(_ error: AppError) -> String {
-        let guidance = error.guidance
-        return guidance.isEmpty ? "Connection failed." : guidance
-    }
 }
 
 private struct Badge: View {
@@ -262,13 +225,4 @@ private struct Badge: View {
     }
 }
 
-private extension ConnectionStep {
-    var title: String {
-        switch self {
-        case .findingAddress: "Finding address"
-        case .enablingWifi: "Enabling Wi-Fi"
-        case .connecting: "Connecting"
-        case .verifying: "Verifying"
-        }
-    }
-}
+
