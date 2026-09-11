@@ -59,6 +59,11 @@ public struct ADBClient: Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    public func wifiAddresses(serial: String) async throws -> [WiFiAddress] {
+        let stdout = try await shell(serial: serial, command: "ip -o -4 addr show up")
+        return WiFiAddressParser.parse(stdout)
+    }
+
     private func invoke(_ arguments: [String], timeout: Duration = defaultTimeout) async throws -> CommandResult {
         let result = try await runner.run(executable: executable, arguments: arguments, timeout: timeout)
         if arguments.first == "-s" {

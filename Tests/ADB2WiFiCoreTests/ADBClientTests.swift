@@ -145,3 +145,20 @@ func unauthorizedOutputThrowsUnauthorized(stdout: String, stderr: String) async 
     #expect(runner.calls[0].arguments == ["disconnect", "192.0.2.42:5555"])
     #expect(runner.calls[0].timeout == .seconds(8))
 }
+
+@Test func wifiAddressesShellsIpDashODash4AddrShowUp() async throws {
+    let stdout = """
+    1: lo    inet 127.0.0.1/8 ...
+    12: wlan0    inet 192.0.2.42/24 ...
+    14: rmnet_data0 inet 10.132.4.8/30 ...
+    """
+    let runner = FakeCommandRunner(handlers: [{ _ in ok(stdout) }])
+    let client = ADBClient(executable: adbURL, runner: runner)
+
+    let addresses = try await client.wifiAddresses(serial: "USB123")
+
+    #expect(runner.calls.count == 1)
+    #expect(runner.calls[0].arguments == ["-s", "USB123", "shell", "ip -o -4 addr show up"])
+    #expect(runner.calls[0].timeout == .seconds(8))
+    #expect(addresses == [WiFiAddress(interface: "wlan0", ipv4: "192.0.2.42")])
+}
