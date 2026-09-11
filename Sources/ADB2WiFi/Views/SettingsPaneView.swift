@@ -7,6 +7,12 @@ struct SettingsPaneView: View {
     var onChooseADB: () -> Void
     var onDone: () -> Void
 
+    @FocusState private var focusedControl: SettingsFocus?
+
+    private enum SettingsFocus: Hashable {
+        case path, choose, done
+    }
+
     private var resolvedURL: URL? {
         ADBExecutable.resolve(
             override: settings.adbPathOverride,
@@ -35,7 +41,11 @@ struct SettingsPaneView: View {
                     )
                 )
                 .textFieldStyle(.roundedBorder)
+                .focused($focusedControl, equals: .path)
+                .accessibilityLabel("Path to adb")
                 Button("Choose…", action: onChooseADB)
+                    .accessibilityLabel("Choose…")
+                    .focused($focusedControl, equals: .choose)
             }
             resolvedSection
             VStack(alignment: .leading, spacing: 4) {
@@ -50,6 +60,8 @@ struct SettingsPaneView: View {
                 Spacer()
                 Button("Done", action: onDone)
                     .keyboardShortcut(.defaultAction)
+                    .accessibilityLabel("Done")
+                    .focused($focusedControl, equals: .done)
             }
         }
         .padding(14)

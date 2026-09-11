@@ -8,6 +8,7 @@ struct PopoverRootView: View {
     var onQuit: () -> Void
     var onChooseADB: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showingSettings = false
 
     private var usingFixtures: Bool { FixtureDevices.isEnabled }
@@ -23,14 +24,23 @@ struct PopoverRootView: View {
                     showingSettings = false
                     Task { await store.refresh() }
                 }
+                .transition(reduceMotion ? .identity : .opacity)
             } else {
                 deviceList
+                    .transition(reduceMotion ? .identity : .opacity)
             }
         }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: showingSettings)
         .frame(width: 360)
         .frame(minHeight: 220, maxHeight: 560)
         .background(.regularMaterial)
         .tint(Theme.accent)
+        .transaction { transaction in
+            if reduceMotion {
+                transaction.disablesAnimations = true
+                transaction.animation = nil
+            }
+        }
     }
 
     private var deviceList: some View {

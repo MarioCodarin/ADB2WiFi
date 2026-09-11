@@ -6,6 +6,7 @@ struct EmptyStateView: View {
             Image(systemName: "cable.connector")
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text("Plug in an Android device")
                 .font(.headline)
                 .multilineTextAlignment(.center)
@@ -22,5 +23,6 @@ struct EmptyStateView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 160)
         .padding(16)
+        .accessibilityElement(children: .combine)
     }
 }

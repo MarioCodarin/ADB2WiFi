@@ -49,7 +49,7 @@ Runtime objects (wired after the shell exists):
 
 `AppSettings` stores `adbPathOverride` under UserDefaults key `adbPathOverride` and accepts a storage protocol so tests can inject memory-backed defaults.
 
-Packaging: `Scripts/package-app.sh` builds a release arm64 binary and wraps it in `dist/ADB2WiFi.app` with `Resources/Info.plist`. No codesign or notarize in v1. Toolchain is Apple Swift + Command Line Tools (`swift build` / `swift test`), not Xcode.app.
+Packaging: `Scripts/package-app.sh` builds a release arm64 binary and wraps it in `dist/ADB2WiFi.app` with `Resources/Info.plist`. No codesign or notarize in v1. Toolchain is Apple Swift + Command Line Tools (`swift build` / `bash Scripts/test.sh`), not Xcode.app.
 
 ## Discovery
 
@@ -131,7 +131,7 @@ Core stays UI-free so Swift Testing can cover parsing, merging, targeting, timeo
 - ADB port 5555. Connect deadline 20 seconds. Command timeout 8 seconds.
 - Poll 2 s open / 10 s closed.
 - UserDefaults key `adbPathOverride`.
-- Hardware validation on a real phone is pending and must be labeled as such; do not claim it passed.
+- Hardware validation: USB discovery observed 2026-09-11; one-click Wi-Fi ADB and two-phone isolation remain pending and must be labeled as such.
 
 **In scope**
 
@@ -163,3 +163,9 @@ Core stays UI-free so Swift Testing can cover parsing, merging, targeting, timeo
 - **Quit does not tear down Wi-Fi ADB.** The whole point is to unplug and keep working.
 - **Never `adb kill-server`.** Recovery is Retry, replug, or choose another ADB path.
 - **Testable core.** Fake command runner + Swift Testing cover parser/merge/coordinator cases. Hardware acceptance is a separate, explicit README line.
+
+## Implementation notes
+
+- Tests: Command Line Tools SwiftPM does not pass `-F` for Testing.framework to the synthesized test runner. Use `bash Scripts/test.sh` (wraps `swift test --toolset Scripts/clt-testing.toolset.json`). Bare `swift test` can exit 0 without running tests.
+- Fixture catalog is opt-in via `ADB2WIFI_FIXTURES=1` only. Debug builds talk to live ADB unless that env is set.
+- Hardware validation (2026-09-11): discovery of an authorized USB phone was observed (an authorized USB phone in the popover on first open; a pre-existing Wi-Fi a Wi-Fi phone was also listed). One-click verified Wi-Fi ADB after unplug is pending. Two-phone hardware isolation is pending (unit tests cover targeting).

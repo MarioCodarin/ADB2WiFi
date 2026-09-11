@@ -4,6 +4,8 @@ struct HeaderView: View {
     let deviceCount: Int
     var onRefresh: () -> Void
 
+    @FocusState private var refreshFocused: Bool
+
     var body: some View {
         HStack(spacing: 8) {
             Text("ADB2WiFi")
@@ -14,9 +16,13 @@ struct HeaderView: View {
                 .foregroundStyle(.secondary)
             Button(action: onRefresh) {
                 Image(systemName: "arrow.clockwise")
+                    .accessibilityHidden(true)
             }
             .buttonStyle(.plain)
             .help("Refresh")
+            .accessibilityLabel("Refresh")
+            .accessibilityIdentifier("Refresh")
+            .focused($refreshFocused)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
