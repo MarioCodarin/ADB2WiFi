@@ -59,11 +59,14 @@ struct SettingsPaneView: View {
             }
         }
         .padding(14)
-        .onAppear {
-            Task { await store.refreshVersion() }
-        }
-        .onChange(of: settings.adbPathOverride) { _, _ in
-            Task { await store.refreshVersion() }
+        // Debounced: the path field writes on every keystroke, and each change spawns `adb version`.
+        .task(id: settings.adbPathOverride) {
+            do {
+                try await Task.sleep(for: .milliseconds(300))
+            } catch {
+                return
+            }
+            await store.refreshVersion()
         }
     }
 

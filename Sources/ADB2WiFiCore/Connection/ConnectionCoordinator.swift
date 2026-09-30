@@ -213,17 +213,20 @@ public final class ConnectionCoordinator {
         update(identity) { $0.operation = .failed(error) }
     }
 
-    /// `#.#.#.#`, optional `:port`; append `:5555` when the port is omitted.
+    /// `#.#.#.#` (octets 0-255), optional `:port` (1-65535); append the default port when omitted.
     private static func normalizedEndpoint(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let match = trimmed.wholeMatch(of: /^(\d+\.\d+\.\d+\.\d+)(?::(\d+))?$/) else {
+        guard let match = trimmed.wholeMatch(of: /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?::(\d{1,5}))?$/) else {
             return nil
         }
-        let ip = String(match.1)
-        if let port = match.2 {
-            return "\(ip):\(port)"
+        let octets = [match.1, match.2, match.3, match.4].compactMap { Int($0) }
+        guard octets.count == 4, octets.allSatisfy({ $0 <= 255 }) else { return nil }
+        var port = defaultPort
+        if let rawPort = match.5 {
+            guard let parsed = Int(rawPort), (1...65535).contains(parsed) else { return nil }
+            port = parsed
         }
-        return "\(ip):\(defaultPort)"
+        return "\(octets.map(String.init).joined(separator: ".")):\(port)"
     }
 
     /// Prefer the first `wlan*` / `wifi*` (not `swlan*`); otherwise the first Wi-Fi-like address.
