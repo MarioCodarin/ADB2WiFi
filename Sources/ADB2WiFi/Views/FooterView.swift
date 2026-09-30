@@ -13,11 +13,9 @@ struct FooterView: View {
     var body: some View {
         HStack {
             Button("Settings", action: onSettings)
-                .accessibilityLabel("Settings")
                 .focused($focusedControl, equals: .settings)
             Spacer()
             Button("Quit", action: onQuit)
-                .accessibilityLabel("Quit")
                 .focused($focusedControl, equals: .quit)
         }
         .buttonStyle(.plain)

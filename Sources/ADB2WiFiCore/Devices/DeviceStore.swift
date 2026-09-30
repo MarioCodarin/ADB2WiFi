@@ -162,7 +162,7 @@ public final class DeviceStore {
         } catch is CancellationError {
             return
         } catch {
-            globalError = mapError(error)
+            globalError = AppError(mapping: error)
         }
     }
 
@@ -195,7 +195,7 @@ public final class DeviceStore {
         devices.first { $0.identity == identity }
     }
 
-    private func resolvedExecutable() -> URL? {
+    public func resolvedExecutable() -> URL? {
         ADBExecutable.resolve(
             override: settings.adbPathOverride,
             fileManager: fileManager,
@@ -226,24 +226,6 @@ public final class DeviceStore {
             throw CancellationError()
         } catch {
             return nil
-        }
-    }
-
-    private func mapError(_ error: Error) -> AppError {
-        switch error {
-        case ADBError.missingExecutable:
-            return .missingADB
-        case ADBError.timeout:
-            return .timeout
-        case ADBError.unauthorized:
-            return .authorizationPending
-        case ADBError.unparseable(let output):
-            return .adbOutput(output)
-        case ADBError.nonZeroExit(let result):
-            let message = [result.stderr, result.stdout].first { !$0.isEmpty } ?? "exit \(result.exitCode)"
-            return .adbOutput(message)
-        default:
-            return .adbOutput(String(describing: error))
         }
     }
 }

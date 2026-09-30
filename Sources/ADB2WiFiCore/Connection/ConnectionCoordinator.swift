@@ -52,7 +52,7 @@ public final class ConnectionCoordinator {
         } catch is CancellationError {
             return
         } catch {
-            fail(identity, mapError(error))
+            fail(identity, AppError(mapping: error))
         }
     }
 
@@ -66,7 +66,7 @@ public final class ConnectionCoordinator {
         } catch is CancellationError {
             return
         } catch {
-            fail(identity, mapError(error))
+            fail(identity, AppError(mapping: error))
             return
         }
         device.network = nil
@@ -213,27 +213,6 @@ public final class ConnectionCoordinator {
         update(identity) { $0.operation = .failed(error) }
     }
 
-    private func mapError(_ error: Error) -> AppError {
-        if let appError = error as? AppError {
-            return appError
-        }
-        switch error {
-        case ADBError.timeout:
-            return .timeout
-        case ADBError.unauthorized:
-            return .authorizationPending
-        case ADBError.missingExecutable:
-            return .missingADB
-        case ADBError.unparseable(let output):
-            return .adbOutput(output)
-        case ADBError.nonZeroExit(let result):
-            let message = [result.stderr, result.stdout].first { !$0.isEmpty } ?? "exit \(result.exitCode)"
-            return .adbOutput(message)
-        default:
-            return .adbOutput(String(describing: error))
-        }
-    }
-
     /// `#.#.#.#`, optional `:port`; append `:5555` when the port is omitted.
     private static func normalizedEndpoint(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -244,7 +223,7 @@ public final class ConnectionCoordinator {
         if let port = match.2 {
             return "\(ip):\(port)"
         }
-        return "\(ip):5555"
+        return "\(ip):\(defaultPort)"
     }
 
     /// Prefer the first `wlan*` / `wifi*` (not `swlan*`); otherwise the first Wi-Fi-like address.

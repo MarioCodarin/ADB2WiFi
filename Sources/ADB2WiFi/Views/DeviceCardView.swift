@@ -35,8 +35,8 @@ struct DeviceCardView: View {
         .padding(12)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .focusSection()
-        .onAppear {
-            if case .awaitingAddress(let suggested) = device.operation, addressText.isEmpty {
+        .onChange(of: device.operation, initial: true) { _, operation in
+            if case .awaitingAddress(let suggested) = operation, addressText.isEmpty {
                 addressText = suggested ?? ""
             }
         }
@@ -135,7 +135,6 @@ struct DeviceCardView: View {
         } else if device.usb?.state == .device {
             Button("Connect via Wi-Fi", action: onConnect)
                 .buttonStyle(.borderedProminent)
-                .accessibilityLabel("Connect via Wi-Fi")
                 .focused($focusedControl, equals: .connect)
         }
     }
@@ -144,7 +143,6 @@ struct DeviceCardView: View {
         Button("Disconnect", action: onDisconnect)
             .buttonStyle(.bordered)
             .help(ConnectionCoordinator.disconnectHelpText)
-            .accessibilityLabel("Disconnect")
             .accessibilityHint(ConnectionCoordinator.disconnectHelpText)
             .focused($focusedControl, equals: .disconnect)
     }
@@ -152,7 +150,6 @@ struct DeviceCardView: View {
     private var retryButton: some View {
         Button("Retry", action: onRetry)
             .buttonStyle(.bordered)
-            .accessibilityLabel("Retry")
             .focused($focusedControl, equals: .retry)
     }
 
@@ -165,10 +162,11 @@ struct DeviceCardView: View {
 
     private func connectingBody(current: ConnectionStep) -> some View {
         let steps: [ConnectionStep] = [.findingAddress, .enablingWifi, .connecting, .verifying]
+        let currentIndex = steps.firstIndex(of: current) ?? 0
         return VStack(alignment: .leading, spacing: 6) {
-            ForEach(steps, id: \.self) { step in
+            ForEach(Array(steps.enumerated()), id: \.element) { index, step in
                 let isCurrent = step == current
-                let isDone = steps.firstIndex(of: step)! < steps.firstIndex(of: current)!
+                let isDone = index < currentIndex
                 HStack(spacing: 8) {
                     if isCurrent {
                         ProgressView()
@@ -191,13 +189,11 @@ struct DeviceCardView: View {
             TextField("IPv4 address", text: $addressText)
                 .textFieldStyle(.roundedBorder)
                 .focused($focusedControl, equals: .addressField)
-                .accessibilityLabel("IPv4 address")
             Button("Continue") {
                 onContinue(addressText)
             }
             .buttonStyle(.borderedProminent)
             .disabled(addressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .accessibilityLabel("Continue")
             .focused($focusedControl, equals: .continueButton)
         }
     }
@@ -211,7 +207,6 @@ struct DeviceCardView: View {
         case .failed: "failed"
         }
     }
-
 }
 
 private struct Badge: View {
@@ -230,5 +225,3 @@ private struct Badge: View {
             )
     }
 }
-
-

@@ -13,15 +13,6 @@ struct SettingsPaneView: View {
         case path, choose, done
     }
 
-    private var resolvedURL: URL? {
-        ADBExecutable.resolve(
-            override: settings.adbPathOverride,
-            fileManager: FileManager.default,
-            pathEnv: ProcessInfo.processInfo.environment["PATH"] ?? "",
-            environment: ProcessInfo.processInfo.environment
-        )
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Settings")
@@ -78,7 +69,7 @@ struct SettingsPaneView: View {
 
     @ViewBuilder
     private var resolvedSection: some View {
-        if let url = resolvedURL {
+        if let url = store.resolvedExecutable() {
             Text(url.path)
                 .font(.caption)
                 .foregroundStyle(.secondary)
