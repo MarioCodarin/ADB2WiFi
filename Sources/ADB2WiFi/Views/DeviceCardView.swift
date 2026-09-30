@@ -10,7 +10,7 @@ struct DeviceCardView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focusedControl: CardFocus?
-    @State private var addressText = ""
+    @ViewState private var addressText = ""
 
     private enum CardFocus: Hashable {
         case connect, retry, disconnect, continueButton, addressField

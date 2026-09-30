@@ -9,7 +9,7 @@ struct PopoverRootView: View {
     var onChooseADB: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var showingSettings = false
+    @ViewState private var showingSettings = false
 
     private var usingFixtures: Bool { FixtureDevices.isEnabled }
 

@@ -7,7 +7,7 @@ struct HeaderView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var refreshFocused: Bool
-    @State private var rotationDegrees = 0.0
+    @ViewState private var rotationDegrees = 0.0
 
     var body: some View {
         HStack(spacing: 8) {
