@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1 — 2026-11-10
+
+### Fixed
+
+- Diagnostics now reports stable error case names instead of raw `adb` output, so a
+  serial number or endpoint can never appear in a copied support report.
+- Long `adb` errors are truncated before they reach the popover.
+- In-flight polling is cancelled on sleep and quit; the process runner terminates its child.
+- An address prompt is logged as `connect prompt`, not `connect ok`.
+
 ## 0.2.0 — 2026-11-10
 
 ### Added
