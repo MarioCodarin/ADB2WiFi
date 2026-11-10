@@ -60,3 +60,16 @@ import Testing
     #expect(result.stdout.contains("[output truncated at 256 KB]"))
     #expect(result.stdout.utf8.count < 300_000)
 }
+
+@Test func capturesStdoutAcrossRepeatedRuns() async throws {
+    let runner = ProcessCommandRunner()
+    for index in 0..<20 {
+        let result = try await runner.run(
+            executable: URL(fileURLWithPath: "/bin/echo"),
+            arguments: ["run-\(index)"],
+            timeout: .seconds(2)
+        )
+        let output = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(output == "run-\(index)")
+    }
+}

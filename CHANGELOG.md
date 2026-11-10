@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1 — 2026-11-10
+
+### Fixed
+
+- Process stdout/stderr collection is now deterministic. A fast command such as
+  `/bin/echo` could intermittently return empty output because the old
+  readability-handler collector raced the process termination handler. Both pipes
+  are now drained by dedicated readers before the result is returned.
+- Added a 20-iteration stdout regression test.
+
 ## 0.4.0 — 2026-11-10
 
 ### Added

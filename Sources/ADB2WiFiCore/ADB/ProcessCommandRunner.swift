@@ -4,6 +4,7 @@ import Foundation
 public struct ProcessCommandRunner: CommandRunning {
     /// Guardrail so a chatty child can never grow the menu-bar app without bound.
     private static let outputLimit = 256 * 1024
+    private static let readChunk = 64 * 1024
     private static let killGrace: Duration = .seconds(1)
 
     public init() {}
@@ -19,21 +20,26 @@ public struct ProcessCommandRunner: CommandRunning {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
-        let stdout = PipeBuffer(limit: Self.outputLimit)
-        let stderr = PipeBuffer(limit: Self.outputLimit)
-        stdout.attach(stdoutPipe)
-        stderr.attach(stderrPipe)
-
         let exit = ExitSignal()
         process.terminationHandler = { _ in exit.signal() }
 
         do {
             try process.run()
         } catch {
-            stdout.detach(stdoutPipe)
-            stderr.detach(stderrPipe)
+            stdoutPipe.fileHandleForReading.closeFile()
+            stderrPipe.fileHandleForReading.closeFile()
             exit.signal()
             throw ADBError.launchFailed(error.localizedDescription)
+        }
+
+        // Drain both pipes concurrently. This avoids the classic race where a
+        // termination handler resumes before `readToEnd`/readability handlers have
+        // delivered the last chunk.
+        let stdoutReader = Task.detached(priority: .utility) {
+            Self.readAll(stdoutPipe.fileHandleForReading, limit: Self.outputLimit)
+        }
+        let stderrReader = Task.detached(priority: .utility) {
+            Self.readAll(stderrPipe.fileHandleForReading, limit: Self.outputLimit)
         }
 
         let timedOut = TimeoutFlag()
@@ -61,17 +67,50 @@ public struct ProcessCommandRunner: CommandRunning {
         }
         watchdog.cancel()
 
-        let stdoutText = stdout.finish(stdoutPipe)
-        let stderrText = stderr.finish(stderrPipe)
+        let stdout = await stdoutReader.value
+        let stderr = await stderrReader.value
 
         if timedOut.isSet { throw ADBError.timeout }
         try Task.checkCancellation()
 
         return CommandResult(
             exitCode: process.terminationStatus,
-            stdout: stdoutText,
-            stderr: stderrText
+            stdout: stdout,
+            stderr: stderr
         )
+    }
+
+    private static func readAll(_ handle: FileHandle, limit: Int) -> String {
+        var data = Data()
+        var truncated = false
+
+        while true {
+            let chunk: Data
+            do {
+                chunk = try handle.read(upToCount: readChunk) ?? Data()
+            } catch {
+                break
+            }
+            guard !chunk.isEmpty else { break }
+
+            let remaining = limit - data.count
+            if remaining <= 0 {
+                truncated = true
+                continue
+            }
+            if chunk.count > remaining {
+                data.append(contentsOf: chunk.prefix(remaining))
+                truncated = true
+            } else {
+                data.append(chunk)
+            }
+        }
+
+        var text = String(decoding: data, as: UTF8.self)
+        if truncated {
+            text += "\n[output truncated at \(limit / 1024) KB]"
+        }
+        return text
     }
 
     private static func signal(_ process: Process, _ signal: Int32) {
@@ -115,60 +154,4 @@ private final class TimeoutFlag: @unchecked Sendable {
 
     func set() { lock.withLock { value = true } }
     var isSet: Bool { lock.withLock { value } }
-}
-
-/// Accumulates pipe output on a background queue, capped at `limit` bytes.
-private final class PipeBuffer: @unchecked Sendable {
-    private let lock = NSLock()
-    private let limit: Int
-    private var data = Data()
-    private var truncated = false
-
-    init(limit: Int) {
-        self.limit = limit
-    }
-
-    func attach(_ pipe: Pipe) {
-        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let chunk = handle.availableData
-            guard !chunk.isEmpty else {
-                handle.readabilityHandler = nil
-                return
-            }
-            self?.append(chunk)
-        }
-    }
-
-    func detach(_ pipe: Pipe) {
-        pipe.fileHandleForReading.readabilityHandler = nil
-    }
-
-    func finish(_ pipe: Pipe) -> String {
-        pipe.fileHandleForReading.readabilityHandler = nil
-        if let rest = try? pipe.fileHandleForReading.readToEnd(), !rest.isEmpty {
-            append(rest)
-        }
-        let (snapshot, wasTruncated) = lock.withLock { (data, truncated) }
-        var text = String(decoding: snapshot, as: UTF8.self)
-        if wasTruncated {
-            text += "\n[output truncated at \(limit / 1024) KB]"
-        }
-        return text
-    }
-
-    private func append(_ chunk: Data) {
-        lock.withLock {
-            let remaining = limit - data.count
-            guard remaining > 0 else {
-                truncated = true
-                return
-            }
-            if chunk.count > remaining {
-                data.append(contentsOf: chunk.prefix(remaining))
-                truncated = true
-            } else {
-                data.append(chunk)
-            }
-        }
-    }
 }
