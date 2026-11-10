@@ -32,9 +32,25 @@ public enum Diagnostics {
         Time: \(formatter.string(from: now))
         ADB: \(adb)
         Devices: \(deviceCount) (\(connectedCount) on Wi-Fi)
-        Last error: \(lastError.map { String(describing: $0) } ?? "none")
+        Last error: \(lastError.map(Self.label(for:)) ?? "none")
         Logs: log show --predicate 'subsystem == "\(Log.subsystem)"' --last 15m --info --debug
         """
+    }
+
+    /// Stable case names only. Raw `adb` output can contain an endpoint or serial.
+    static func label(for error: AppError) -> String {
+        switch error {
+        case .missingADB: "missingADB"
+        case .authorizationPending: "authorizationPending"
+        case .deviceOffline: "deviceOffline"
+        case .missingWiFiAddress: "missingWiFiAddress"
+        case .unreachableEndpoint: "unreachableEndpoint"
+        case .usbRemoved: "usbRemoved"
+        case .timeout: "timeout"
+        case .identityMismatch: "identityMismatch"
+        case .adbLaunchFailed: "adbLaunchFailed"
+        case .adbOutput: "adbOutput"
+        }
     }
 
     public static var currentArchitecture: String {

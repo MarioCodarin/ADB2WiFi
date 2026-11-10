@@ -249,6 +249,7 @@ public final class DeviceStore {
     public func stop() {
         intervalWaitTask?.cancel()
         pollTask?.cancel()
+        refreshTask?.cancel()
         pollTask = nil
         Log.devices.notice("polling stopped")
     }

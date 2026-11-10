@@ -58,8 +58,9 @@ public final class ConnectionCoordinator {
 
         do {
             try await runConnect(identity: identity, manualAddress: manualAddress, client: client)
+            let outcome = store.device(for: identity)?.operation.isAwaitingAddress == true ? "prompt" : "ok"
             Log.connection.notice(
-                "connect ok device=\(identity.serialNo, privacy: .private) duration=\((ContinuousClock.now - started).inMilliseconds, privacy: .public)ms"
+                "connect \(outcome, privacy: .public) device=\(identity.serialNo, privacy: .private) duration=\((ContinuousClock.now - started).inMilliseconds, privacy: .public)ms"
             )
         } catch is CancellationError {
             Log.connection.notice("connect cancelled device=\(identity.serialNo, privacy: .private)")

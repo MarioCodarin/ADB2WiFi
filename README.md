@@ -158,7 +158,7 @@ connect start manual=false port=5555
 
 ```sh
 swift build                        # debug build
-bash Scripts/test.sh               # 130 Swift Testing tests
+bash Scripts/test.sh               # 132 Swift Testing tests
 bash Scripts/package-app.sh        # arm64 app in dist/
 bash Scripts/package-app.sh --universal
 bash Scripts/release.sh            # universal zip + SHA-256

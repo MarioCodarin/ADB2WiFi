@@ -72,3 +72,15 @@ import Testing
     #expect(AppError.unreachableEndpoint.title == "Can’t reach phone")
     #expect(AppError.identityMismatch.title == "Wrong device")
 }
+
+
+@Test func longADBOutputIsTruncatedForThePopover() {
+    let long = String(repeating: "x", count: 900)
+    let error = AppError(mapping: ADBError.unparseable(long))
+    guard case .adbOutput(let message) = error else {
+        Issue.record("expected adbOutput")
+        return
+    }
+    #expect(message.count == 401)
+    #expect(message.hasSuffix("…"))
+}

@@ -15,12 +15,19 @@ extension AppError {
         case ADBError.launchFailed(let message):
             self = .adbLaunchFailed(message)
         case ADBError.unparseable(let output):
-            self = .adbOutput(output)
+            self = .adbOutput(Self.truncated(output))
         case ADBError.nonZeroExit(let result):
             let message = [result.stderr, result.stdout].first { !$0.isEmpty } ?? "exit \(result.exitCode)"
-            self = .adbOutput(message)
+            self = .adbOutput(Self.truncated(message))
         default:
-            self = .adbOutput(String(describing: error))
+            self = .adbOutput(Self.truncated(String(describing: error)))
         }
+    }
+
+    /// Keeps a raw ADB message from turning the popover into a wall of text.
+    private static func truncated(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > 400 else { return trimmed }
+        return String(trimmed.prefix(400)) + "…"
     }
 }

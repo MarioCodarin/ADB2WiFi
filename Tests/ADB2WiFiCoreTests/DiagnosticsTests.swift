@@ -46,6 +46,24 @@ private let fixedDate = Date(timeIntervalSince1970: 1_800_000_000)
     #expect(!summary.contains("TEST00000001"))
 }
 
+@Test func diagnosticsNeverIncludeRawADBOutput() {
+    let summary = Diagnostics.summary(
+        appVersion: "0.2.0",
+        adbPath: nil,
+        adbVersion: nil,
+        deviceCount: 0,
+        connectedCount: 0,
+        lastError: .adbOutput("failed to connect to 192.0.2.42:5555 for TEST00000001"),
+        now: fixedDate,
+        operatingSystem: "27.2.0",
+        architecture: "arm64",
+        homeDirectory: "/Users/mario"
+    )
+    #expect(summary.contains("Last error: adbOutput"))
+    #expect(!summary.contains("192.0.2.42"))
+    #expect(!summary.contains("TEST00000001"))
+}
+
 @Test func redactionLeavesOutsidePathsAlone() {
     #expect(Diagnostics.redact("/opt/homebrew/bin/adb", homeDirectory: "/Users/mario") == "/opt/homebrew/bin/adb")
     #expect(Diagnostics.redact("/Users/mario", homeDirectory: "/Users/mario") == "~")
