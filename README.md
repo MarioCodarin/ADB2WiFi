@@ -95,7 +95,7 @@ every directory in `PATH`.
 Advanced users can override the path for a single launch:
 
 ```sh
-ADB2WIFI_ADB_PATH=/path/to/adb open -a ADB2WiFi
+open -a ADB2WiFi --env ADB2WIFI_ADB_PATH=/path/to/adb
 ```
 
 Settings are stored locally in `~/Library/Preferences/io.github.mariocodarin.ADB2WiFi.plist`.
