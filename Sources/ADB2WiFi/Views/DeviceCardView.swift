@@ -7,10 +7,12 @@ struct DeviceCardView: View {
     var onRetry: () -> Void = {}
     var onContinue: (String) -> Void = { _ in }
     var onDisconnect: () -> Void = {}
+    var onCancel: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focusedControl: CardFocus?
     @ViewState private var addressText = ""
+    @ViewState private var isHovering = false
 
     private enum CardFocus: Hashable {
         case connect, retry, disconnect, continueButton, addressField
@@ -18,63 +20,96 @@ struct DeviceCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 10) {
-                identityRow
-                statusBody
-                    .id(operationAnimationID)
-                    .transition(reduceMotion ? .identity : .opacity)
+            identityRow
+            if let endpoint = device.network?.serial {
+                endpointRow(endpoint)
             }
-            // Combine identity + status; keep buttons/fields as separate AX elements.
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(device.model), serial \(device.identity.shortSerial)")
-            .accessibilityValue(device.accessibilityValue)
-
+            statusBody
             actionBody
         }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: operationAnimationID)
         .padding(12)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Theme.cardFill, in: RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
+                .strokeBorder(isHovering ? Theme.accent.opacity(0.35) : Theme.cardStroke)
+        )
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: device.operation)
+        .onHover { hovering in isHovering = hovering }
         .focusSection()
         .onChange(of: device.operation, initial: true) { _, operation in
             if case .awaitingAddress(let suggested) = operation, addressText.isEmpty {
                 addressText = suggested ?? ""
             }
         }
+        .accessibilityElement(children: .contain)
     }
 
+    // MARK: Identity
+
     private var identityRow: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "iphone")
-                .font(.title2)
-                .foregroundStyle(Theme.accent)
-                .frame(width: 28)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(device.model)
-                    .font(.headline)
-                Text(device.identity.shortSerial)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                if let endpoint = device.network?.serial {
-                    Text(endpoint)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
+        HStack(alignment: .top, spacing: 9) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Theme.iconFill)
+                    .frame(width: 30, height: 30)
+                Image(systemName: "iphone")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Theme.accent)
             }
-            Spacer(minLength: 8)
-            HStack(spacing: 6) {
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(device.model.isEmpty ? "Android phone" : device.model)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                Text(device.identity.shortSerial)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .textSelection(.enabled)
+                    .accessibilityLabel("Serial \(device.identity.shortSerial)")
+            }
+
+            Spacer(minLength: 4)
+
+            HStack(spacing: 4) {
                 if device.usb != nil {
-                    Badge(text: "USB", emphasized: device.usb?.state == .device)
+                    CapsuleBadge(
+                        text: "USB",
+                        systemImage: "cable.connector",
+                        tint: device.usb?.state == .device ? Theme.accent : Theme.warning
+                    )
                 }
                 if device.network != nil {
-                    Badge(text: "Wi-Fi", emphasized: device.isWiFiConnected)
+                    CapsuleBadge(
+                        text: "Wi-Fi",
+                        systemImage: "wifi",
+                        tint: device.isWiFiConnected ? Theme.success : .secondary,
+                        emphasized: device.isWiFiConnected
+                    )
                 }
             }
             .accessibilityHidden(true)
         }
+        .accessibilityElement(children: .combine)
     }
+
+    private func endpointRow(_ endpoint: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "link")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Theme.success)
+            Text(endpoint)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            Spacer(minLength: 4)
+            CopyButton(text: endpoint, label: "Copy")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Wi-Fi endpoint \(endpoint)")
+    }
+
+    // MARK: Status
 
     @ViewBuilder
     private var statusBody: some View {
@@ -84,31 +119,78 @@ struct DeviceCardView: View {
         case .connecting(let step):
             connectingBody(current: step)
         case .awaitingAddress:
-            EmptyView()
+            StatusLine(
+                systemImage: "questionmark.circle.fill",
+                tint: Theme.warning,
+                title: "Choose an address",
+                detail: "More than one Wi-Fi address was found. Pick the one on your network."
+            )
         case .readyToUnplug:
-            Label("Ready—unplug USB.", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.subheadline.weight(.semibold))
+            StatusLine(
+                systemImage: "checkmark.circle.fill",
+                tint: Theme.success,
+                title: "You’re on Wi-Fi",
+                detail: "Unplug USB to finish. The connection stays up."
+            )
         case .failed(let error):
-            Text(error.displayedGuidance)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            StatusLine(
+                systemImage: "exclamationmark.triangle.fill",
+                tint: Theme.warning,
+                title: error.title,
+                detail: error.displayedGuidance
+            )
         }
     }
 
     @ViewBuilder
     private var idleStatus: some View {
         if device.usb?.state == .unauthorized {
-            guidanceText(.authorizationPending)
+            StatusLine(
+                systemImage: "lock.shield.fill",
+                tint: Theme.warning,
+                title: "Allow USB debugging",
+                detail: AppError.authorizationPending.displayedGuidance
+            )
         } else if device.usb?.state == .offline {
-            guidanceText(.deviceOffline)
+            StatusLine(
+                systemImage: "bolt.horizontal.circle.fill",
+                tint: Theme.warning,
+                title: "Phone offline",
+                detail: AppError.deviceOffline.displayedGuidance
+            )
         } else if device.isWiFiConnected {
-            Label("Wi-Fi connected", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.subheadline.weight(.semibold))
+            StatusLine(
+                systemImage: "checkmark.circle.fill",
+                tint: Theme.success,
+                title: "Wi-Fi connected",
+                detail: "This Mac can run adb over Wi-Fi."
+            )
         }
     }
+
+    private func connectingBody(current: ConnectionStep) -> some View {
+        let steps: [ConnectionStep] = [.findingAddress, .enablingWifi, .connecting, .verifying]
+        let index = steps.firstIndex(of: current) ?? 0
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 7) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(current.title)
+                    .font(.system(size: 11, weight: .medium))
+                Spacer(minLength: 4)
+                Text("\(index + 1)/\(steps.count)")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+            ProgressView(value: Double(index + 1), total: Double(steps.count))
+                .progressViewStyle(.linear)
+                .tint(Theme.accent)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Connecting, \(current.title), step \(index + 1) of \(steps.count)")
+    }
+
+    // MARK: Actions
 
     @ViewBuilder
     private var actionBody: some View {
@@ -118,110 +200,93 @@ struct DeviceCardView: View {
         case .connecting:
             EmptyView()
         case .awaitingAddress:
-            addressPromptBody
+            addressPrompt
         case .readyToUnplug:
-            disconnectButton
+            connectedActions
         case .failed:
-            retryButton
+            retryActions
         }
     }
 
     @ViewBuilder
     private var idleActions: some View {
         if device.usb?.state == .unauthorized || device.usb?.state == .offline {
-            retryButton
+            retryOnlyAction
         } else if device.isWiFiConnected {
-            disconnectButton
+            connectedActions
         } else if device.usb?.state == .device {
-            Button("Connect via Wi-Fi", action: onConnect)
-                .buttonStyle(.borderedProminent)
-                .focused($focusedControl, equals: .connect)
+            Button(action: onConnect) {
+                Label("Connect over Wi-Fi", systemImage: "wifi")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .focused($focusedControl, equals: .connect)
+            .accessibilityHint("Enables Wi-Fi ADB, connects, and verifies this phone.")
         }
     }
 
-    private var disconnectButton: some View {
-        Button("Disconnect", action: onDisconnect)
-            .buttonStyle(.bordered)
-            .help(ConnectionCoordinator.disconnectHelpText)
-            .accessibilityHint(ConnectionCoordinator.disconnectHelpText)
-            .focused($focusedControl, equals: .disconnect)
+    private var connectedActions: some View {
+        HStack(spacing: 8) {
+            if let endpoint = device.network?.serial {
+                CopyButton(
+                    text: Endpoint.connectCommand(endpoint),
+                    label: "Copy adb command",
+                    systemImage: "terminal"
+                )
+            }
+            Spacer(minLength: 4)
+            Button("Disconnect", action: onDisconnect)
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+                .help(ConnectionCoordinator.disconnectHelpText)
+                .accessibilityHint(ConnectionCoordinator.disconnectHelpText)
+                .focused($focusedControl, equals: .disconnect)
+        }
     }
 
-    private var retryButton: some View {
-        Button("Retry", action: onRetry)
-            .buttonStyle(.bordered)
+    private var retryOnlyAction: some View {
+        Button("Try again", action: onRetry)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
             .focused($focusedControl, equals: .retry)
     }
 
-    private func guidanceText(_ error: AppError) -> some View {
-        Text(error.displayedGuidance)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func connectingBody(current: ConnectionStep) -> some View {
-        let steps: [ConnectionStep] = [.findingAddress, .enablingWifi, .connecting, .verifying]
-        let currentIndex = steps.firstIndex(of: current) ?? 0
-        return VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(steps.enumerated()), id: \.element) { index, step in
-                let isCurrent = step == current
-                let isDone = index < currentIndex
-                HStack(spacing: 8) {
-                    if isCurrent {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(isDone ? .green : .secondary)
-                            .accessibilityHidden(true)
-                    }
-                    Text(step.title)
-                        .font(.subheadline)
-                        .foregroundStyle(isCurrent ? .primary : .secondary)
-                }
-            }
+    private var retryActions: some View {
+        HStack(spacing: 8) {
+            Button("Try again", action: onRetry)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .focused($focusedControl, equals: .retry)
+            Button("Cancel", action: onCancel)
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
         }
     }
 
-    private var addressPromptBody: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("IPv4 address", text: $addressText)
+    private var addressPrompt: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            TextField("192.0.2.20", text: $addressText)
                 .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11, design: .monospaced))
                 .focused($focusedControl, equals: .addressField)
-            Button("Continue") {
-                onContinue(addressText)
+                .accessibilityLabel("IPv4 address")
+            HStack {
+                Button("Continue") {
+                    onContinue(addressText)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(addressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .focused($focusedControl, equals: .continueButton)
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(addressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .focused($focusedControl, equals: .continueButton)
         }
-    }
-
-    private var operationAnimationID: String {
-        switch device.operation {
-        case .idle: "idle"
-        case .connecting(let step): "connecting-\(step.rawValue)"
-        case .awaitingAddress: "awaitingAddress"
-        case .readyToUnplug: "readyToUnplug"
-        case .failed: "failed"
-        }
-    }
-}
-
-private struct Badge: View {
-    let text: String
-    var emphasized: Bool
-
-    var body: some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .foregroundStyle(emphasized ? Color.white : Color.secondary)
-            .background(
-                emphasized ? Theme.accent : Color.secondary.opacity(0.18),
-                in: Capsule()
-            )
     }
 }

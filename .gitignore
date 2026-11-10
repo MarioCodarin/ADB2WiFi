@@ -3,3 +3,8 @@ dist/
 .swiftpm/
 .DS_Store
 .superpowers/
+*.xcuserstate
+*.xcodeproj
+.env
+.env.*
+*.zip

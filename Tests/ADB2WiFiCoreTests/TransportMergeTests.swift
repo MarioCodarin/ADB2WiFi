@@ -27,7 +27,7 @@ import Testing
 }
 
 @Test func keepsConnectingCardWhenUSBDropsDuringRestart() {
-    var existing = Device.fixtureUSBAuthorized
+    var existing = Device.testUSBAuthorized
     existing.operation = .connecting(.enablingWifi)
     let merged = TransportMerger.merge(existing: [existing], transports: [],
                                        identities: [:], models: [:])
@@ -36,7 +36,7 @@ import Testing
 }
 
 @Test func keepsVerifiedWifiCardAfterUSBUnplug() {
-    var existing = Device.fixtureUSBAuthorized
+    var existing = Device.testUSBAuthorized
     existing.network = .init(serial: "192.0.2.42:5555", state: .device, verified: true)
     existing.operation = .readyToUnplug
     let net = ADBTransport(serial: "192.0.2.42:5555", state: .device, model: "Pixel_8")
@@ -115,7 +115,7 @@ import Testing
 }
 
 @Test func dropsIdleDeviceWhenTransportsDisappear() {
-    let existing = Device.fixtureUSBAuthorized
+    let existing = Device.testUSBAuthorized
     let merged = TransportMerger.merge(
         existing: [existing], transports: [], identities: [:], models: [:]
     )
@@ -123,7 +123,7 @@ import Testing
 }
 
 @Test func verifiedWifiSurvivesEmptyPollThenNetworkReturns() {
-    var existing = Device.fixtureUSBAuthorized
+    var existing = Device.testUSBAuthorized
     existing.network = .init(serial: "192.0.2.42:5555", state: .device, verified: true)
     existing.operation = .readyToUnplug
 
@@ -150,7 +150,7 @@ import Testing
 }
 
 @Test func usbPlusVerifiedWifiKeepsWifiWhenPollIsUSBOnly() {
-    var existing = Device.fixtureUSBAuthorized
+    var existing = Device.testUSBAuthorized
     existing.network = .init(serial: "192.0.2.42:5555", state: .device, verified: true)
     existing.operation = .readyToUnplug
     let usb = ADBTransport(serial: "TEST00000001", state: .device, model: "Pixel_8")
@@ -200,7 +200,7 @@ import Testing
 }
 
 @Test func preservesFailedAndAwaitingAddressWhenUSBDrops() {
-    var awaiting = Device.fixtureUSBAuthorized
+    var awaiting = Device.testUSBAuthorized
     awaiting.operation = .awaitingAddress(suggested: "192.0.2.42")
     let failed = Device(
         identity: DeviceIdentity(serialNo: "OTHER"),

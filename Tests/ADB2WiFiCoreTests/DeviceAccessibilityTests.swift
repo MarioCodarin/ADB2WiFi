@@ -9,7 +9,7 @@ import Testing
     )
     #expect(
         device.accessibilityValue
-            == "USB, Unauthorized, Authorize USB debugging on the phone, then tap Retry."
+            == "USB, Unauthorized, Allow USB debugging on your phone, then try again."
     )
 }
 
@@ -21,7 +21,7 @@ import Testing
     )
     #expect(
         device.accessibilityValue
-            == "USB, Offline, The device is offline. Replug USB and check USB debugging."
+            == "USB, Offline, Phone is offline. Reconnect the cable and check USB debugging."
     )
 }
 
@@ -34,12 +34,12 @@ import Testing
     )
     #expect(
         device.accessibilityValue
-            == "USB, Failed, Could not reach the phone over Wi-Fi. Same network? Then Retry."
+            == "USB, Failed, Couldn’t reach the phone. Put both devices on the same network, then retry."
     )
 }
 
 @Test func accessibilityValueForConnectingStepIsTransportAndTitle() {
-    var device = Device.fixtureUSBAuthorized
+    var device = Device.testUSBAuthorized
     device.operation = .connecting(.findingAddress)
     #expect(device.accessibilityValue == "USB, Finding address")
 }
@@ -65,5 +65,5 @@ import Testing
 }
 
 @Test func accessibilityValueForIdleUSBIsTransportOnly() {
-    #expect(Device.fixtureUSBAuthorized.accessibilityValue == "USB")
+    #expect(Device.testUSBAuthorized.accessibilityValue == "USB")
 }

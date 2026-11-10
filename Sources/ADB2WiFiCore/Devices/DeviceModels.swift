@@ -6,8 +6,6 @@ public struct DeviceIdentity: Hashable, Sendable {
     public init(serialNo: String) { self.serialNo = serialNo }
 }
 
-public enum TransportKind: String, Sendable { case usb, network }
-
 public enum Availability: String, Sendable {
     case device, unauthorized, offline, unknown
 }
@@ -25,6 +23,12 @@ public enum OperationState: Equatable, Sendable {
 
     public var isAwaitingAddress: Bool {
         if case .awaitingAddress = self { return true }
+        return false
+    }
+
+    /// A connection attempt is running; poll faster so the card and USB state stay fresh.
+    public var isInFlight: Bool {
+        if case .connecting = self { return true }
         return false
     }
 }
@@ -58,44 +62,6 @@ public struct Device: Identifiable, Equatable, Sendable {
     }
 }
 
-public enum AppError: Equatable, Error, Sendable {
-    case missingADB
-    case authorizationPending
-    case deviceOffline
-    case missingWiFiAddress
-    case unreachableEndpoint
-    case usbRemoved
-    case timeout
-    case identityMismatch
-    case adbOutput(String)
-    public var guidance: String {
-        switch self {
-        case .missingADB:
-            "ADB was not found. Choose the executable in Settings. Homebrew installs it at /opt/homebrew/bin/adb."
-        case .authorizationPending:
-            "Authorize USB debugging on the phone, then tap Retry."
-        case .deviceOffline:
-            "The device is offline. Replug USB and check USB debugging."
-        case .missingWiFiAddress:
-            "No Wi-Fi IPv4 address found. Join a network, or enter the address."
-        case .unreachableEndpoint:
-            "Could not reach the phone over Wi-Fi. Same network? Then Retry."
-        case .usbRemoved:
-            "USB was unplugged before Wi-Fi ADB was enabled. Replug and Retry."
-        case .timeout:
-            "Timed out waiting for Wi-Fi ADB. Retry while USB is still connected."
-        case .identityMismatch:
-            "Connected endpoint is a different device. Disconnect it and Retry."
-        case .adbOutput(let output):
-            output.isEmpty ? "ADB returned an unexpected error." : output
-        }
-    }
-
-    public var displayedGuidance: String {
-        guidance.isEmpty ? "Connection failed." : guidance
-    }
-}
-
 public struct ADBTransport: Equatable, Sendable {
     public var serial: String
     public var state: Availability
@@ -115,13 +81,6 @@ public struct ADBTransport: Equatable, Sendable {
 }
 
 extension Device {
-    /// Authorized USB Pixel used by Core tests. Extra UI states live in the executable.
-    public static let fixtureUSBAuthorized = Device(
-        identity: DeviceIdentity(serialNo: "TEST00000001"),
-        model: "Pixel 8",
-        usb: Transport(serial: "TEST00000001", state: .device)
-    )
-
     /// VoiceOver value: transport plus operation, including on-screen guidance.
     public var accessibilityValue: String {
         [accessibilityTransport, network?.serial, accessibilityOperation]

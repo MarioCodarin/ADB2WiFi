@@ -19,7 +19,11 @@ extension FileManager: FileChecking {
 }
 
 public enum ADBExecutable {
-    /// First existing regular executable, in order: override, Homebrew, `/usr/local`, `~/Library/Android/sdk`, `$ANDROID_HOME`, `$ANDROID_SDK_ROOT`, then each `PATH` directory.
+    /// Environment escape hatch for power users and CI. Takes priority over the UI setting.
+    public static let environmentOverrideKey = "ADB2WIFI_ADB_PATH"
+
+    /// First existing regular executable. An explicit override always wins, then an
+    /// `ADB2WIFI_ADB_PATH` environment value, then the common installs, then `PATH`.
     public static func resolve(
         override: URL?,
         fileManager: any FileChecking,
@@ -27,12 +31,31 @@ public enum ADBExecutable {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> URL? {
+        candidates(
+            override: override,
+            pathEnv: pathEnv,
+            environment: environment,
+            homeDirectory: homeDirectory
+        )
+        .first { isExecutableRegularFile($0, fileManager: fileManager) }
+    }
+
+    public static func candidates(
+        override: URL?,
+        pathEnv: String,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [URL] {
         var candidates: [URL] = []
-        if let override {
+        if let override, !override.path.isEmpty {
             candidates.append(override)
+        }
+        if let envPath = environment[environmentOverrideKey], !envPath.isEmpty {
+            candidates.append(URL(fileURLWithPath: envPath))
         }
         candidates.append(URL(fileURLWithPath: "/opt/homebrew/bin/adb"))
         candidates.append(URL(fileURLWithPath: "/usr/local/bin/adb"))
+        candidates.append(URL(fileURLWithPath: "/opt/local/bin/adb"))
         candidates.append(
             homeDirectory
                 .appendingPathComponent("Library")
@@ -41,16 +64,10 @@ public enum ADBExecutable {
                 .appendingPathComponent("platform-tools")
                 .appendingPathComponent("adb")
         )
-        if let androidHome = environment["ANDROID_HOME"], !androidHome.isEmpty {
+        for key in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+            guard let root = environment[key], !root.isEmpty else { continue }
             candidates.append(
-                URL(fileURLWithPath: androidHome)
-                    .appendingPathComponent("platform-tools")
-                    .appendingPathComponent("adb")
-            )
-        }
-        if let sdkRoot = environment["ANDROID_SDK_ROOT"], !sdkRoot.isEmpty {
-            candidates.append(
-                URL(fileURLWithPath: sdkRoot)
+                URL(fileURLWithPath: root)
                     .appendingPathComponent("platform-tools")
                     .appendingPathComponent("adb")
             )
@@ -58,7 +75,7 @@ public enum ADBExecutable {
         for directory in pathEnv.split(separator: ":", omittingEmptySubsequences: true) {
             candidates.append(URL(fileURLWithPath: String(directory)).appendingPathComponent("adb"))
         }
-        return candidates.first { isExecutableRegularFile($0, fileManager: fileManager) }
+        return candidates
     }
 
     private static func isExecutableRegularFile(_ url: URL, fileManager: any FileChecking) -> Bool {

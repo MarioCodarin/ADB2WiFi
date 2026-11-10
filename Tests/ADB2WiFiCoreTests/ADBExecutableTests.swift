@@ -106,3 +106,39 @@ private struct ExistsSet: FileChecking {
     )
     #expect(url == nil)
 }
+
+@Test func environmentPathWinsOverStandardLocations() {
+    let fm = ExistsSet(["/opt/homebrew/bin/adb", "/custom/adb"])
+    let url = ADBExecutable.resolve(
+        override: nil,
+        fileManager: fm,
+        pathEnv: "",
+        environment: [ADBExecutable.environmentOverrideKey: "/custom/adb"],
+        homeDirectory: URL(fileURLWithPath: "/Users/me")
+    )
+    #expect(url?.path == "/custom/adb")
+}
+
+@Test func explicitOverrideWinsOverEnvironment() {
+    let fm = ExistsSet(["/tmp/chosen-adb", "/custom/adb"])
+    let url = ADBExecutable.resolve(
+        override: URL(fileURLWithPath: "/tmp/chosen-adb"),
+        fileManager: fm,
+        pathEnv: "",
+        environment: [ADBExecutable.environmentOverrideKey: "/custom/adb"],
+        homeDirectory: URL(fileURLWithPath: "/Users/me")
+    )
+    #expect(url?.path == "/tmp/chosen-adb")
+}
+
+@Test func emptyEnvironmentPathIsIgnored() {
+    let fm = ExistsSet(["/opt/homebrew/bin/adb"])
+    let url = ADBExecutable.resolve(
+        override: nil,
+        fileManager: fm,
+        pathEnv: "",
+        environment: [ADBExecutable.environmentOverrideKey: ""],
+        homeDirectory: URL(fileURLWithPath: "/Users/me")
+    )
+    #expect(url?.path == "/opt/homebrew/bin/adb")
+}

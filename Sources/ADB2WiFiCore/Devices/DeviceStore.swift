@@ -16,18 +16,30 @@ struct DefaultSleeper: Sleeping {
     }
 }
 
+/// Adaptive cadence: fast while a connection is in flight, relaxed when the popover is
+/// open, and slow in the background. The app spawns no `adb` process while the Mac sleeps.
+public enum ADBPolling {
+    public static let connecting: Duration = .seconds(1)
+    public static let popoverOpen: Duration = .seconds(3)
+    public static let background: Duration = .seconds(60)
+}
+
 @MainActor
 @Observable
 public final class DeviceStore {
     public private(set) var devices: [Device] = []
     public private(set) var adbVersion: String?
+    public private(set) var adbPath: URL?
+    public private(set) var hasLoaded = false
     public private(set) var globalError: AppError?
     public private(set) var isRefreshing = false
     public var isPopoverOpen = false {
         didSet {
-            if oldValue != isPopoverOpen {
-                intervalWaitTask?.cancel()
-            }
+            guard oldValue != isPopoverOpen else { return }
+            Log.devices.info("popover open=\(self.isPopoverOpen, privacy: .public)")
+            // Wake the loop so opening the popover refreshes immediately instead of
+            // waiting out a background interval.
+            if isPopoverOpen { intervalWaitTask?.cancel() }
         }
     }
 
@@ -43,7 +55,11 @@ public final class DeviceStore {
     @ObservationIgnored private var modelBySerialNo: [String: String] = [:]
     @ObservationIgnored private var pollTask: Task<Void, Never>?
     @ObservationIgnored private var intervalWaitTask: Task<Void, Error>?
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var userRefreshCount = 0
+
+    public var port: Int { settings.port }
+    public var connectedCount: Int { devices.filter(\.isWiFiConnected).count }
 
     public convenience init(settings: AppSettings, runner: any CommandRunning) {
         self.init(
@@ -93,19 +109,27 @@ public final class DeviceStore {
     }
 
     public func refreshVersion() async {
-        guard let client = makeClient() else {
+        adbPath = resolvedExecutable()
+        guard let executable = adbPath else {
             adbVersion = nil
+            Log.settings.notice("adb version unavailable")
             return
         }
+        let client = ADBClient(executable: executable, runner: runner)
         do {
-            adbVersion = try await client.version()
+            let version = try await client.version()
+            adbVersion = version
+            Log.settings.notice("adb version=\(version, privacy: .public)")
         } catch is CancellationError {
             return
         } catch {
             adbVersion = nil
+            Log.settings.error("adb version failed error=\(String(describing: error), privacy: .private)")
         }
     }
 
+    /// Coalesced: concurrent callers share one `adb devices -l` invocation. This keeps
+    /// overlapping timer/user refreshes from spawning duplicate processes.
     public func refresh(userInitiated: Bool = false) async {
         if userInitiated {
             userRefreshCount += 1
@@ -117,16 +141,38 @@ public final class DeviceStore {
                 if userRefreshCount == 0 { isRefreshing = false }
             }
         }
-        guard let client = makeClient() else {
+
+        if let refreshTask {
+            await refreshTask.value
+            return
+        }
+
+        let task = Task { await self.performRefresh() }
+        refreshTask = task
+        await task.value
+        refreshTask = nil
+    }
+
+    private func performRefresh() async {
+        let started = ContinuousClock.now
+        defer { hasLoaded = true }
+        adbPath = resolvedExecutable()
+        guard let executable = adbPath else {
+            if globalError != .missingADB {
+                Log.devices.error("adb missing; keeping \(self.devices.count, privacy: .public) cached device(s)")
+            }
             globalError = .missingADB
             return
         }
+        let client = ADBClient(executable: executable, runner: runner)
+
         do {
             let transports = try await client.devices()
+            try Task.checkCancellation()
+
             let physical = transports.filter { !$0.isEmulator }
             let presentSerials = Set(physical.map(\.serial))
             identityByTransportSerial = identityByTransportSerial.filter { presentSerials.contains($0.key) }
-            try Task.checkCancellation()
 
             for transport in physical where transport.state == .device {
                 if identityByTransportSerial[transport.serial] == nil {
@@ -134,6 +180,9 @@ public final class DeviceStore {
                         try await client.serialNo(serial: transport.serial)
                     }), !serialNo.isEmpty {
                         identityByTransportSerial[transport.serial] = DeviceIdentity(serialNo: serialNo)
+                        Log.devices.debug(
+                            "identity resolved transport=\(transport.serial, privacy: .private) serial=\(serialNo, privacy: .private)"
+                        )
                     }
                 }
                 let identity = identityByTransportSerial[transport.serial]
@@ -152,6 +201,7 @@ public final class DeviceStore {
                 identities[transport.serial] = DeviceIdentity(serialNo: transport.serial)
             }
 
+            let previous = Set(devices.map(\.identity))
             devices = TransportMerger.merge(
                 existing: devices,
                 transports: physical,
@@ -159,19 +209,38 @@ public final class DeviceStore {
                 models: modelBySerialNo
             )
             globalError = nil
+
+            let current = Set(devices.map(\.identity))
+            let added = current.subtracting(previous).count
+            let removed = previous.subtracting(current).count
+            let elapsed = (ContinuousClock.now - started).inMilliseconds
+            if added > 0 || removed > 0 {
+                Log.devices.notice(
+                    "poll total=\(self.devices.count, privacy: .public) added=\(added, privacy: .public) removed=\(removed, privacy: .public) duration=\(elapsed, privacy: .public)ms"
+                )
+            } else {
+                Log.devices.info(
+                    "poll total=\(self.devices.count, privacy: .public) duration=\(elapsed, privacy: .public)ms"
+                )
+            }
         } catch is CancellationError {
             return
         } catch {
             globalError = AppError(mapping: error)
+            Log.devices.error(
+                "poll failed error=\(String(describing: error), privacy: .private) duration=\((ContinuousClock.now - started).inMilliseconds, privacy: .public)ms"
+            )
         }
     }
 
     public func start() {
         guard pollTask == nil else { return }
+        Log.devices.notice("polling started")
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                guard let self else { break }
+                guard let self else { return }
                 await self.refresh()
+                guard !Task.isCancelled else { return }
                 await self.waitForNextInterval()
             }
         }
@@ -181,6 +250,7 @@ public final class DeviceStore {
         intervalWaitTask?.cancel()
         pollTask?.cancel()
         pollTask = nil
+        Log.devices.notice("polling stopped")
     }
 
     public func update(_ device: Device) {
@@ -195,18 +265,39 @@ public final class DeviceStore {
         devices.first { $0.identity == identity }
     }
 
+    #if DEBUG
+    /// Debug-only UI seeding. Release builds never contain fixture devices.
+    public func replaceDevicesForPreview(_ devices: [Device]) {
+        self.devices = devices
+        hasLoaded = true
+    }
+    #endif
+
     public func resolvedExecutable() -> URL? {
-        ADBExecutable.resolve(
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["ADB2WIFI_FORCE_MISSING_ADB"] == "1" {
+            return nil
+        }
+        #endif
+        let url = ADBExecutable.resolve(
             override: settings.adbPathOverride,
             fileManager: fileManager,
             pathEnv: pathEnv,
             environment: environment,
             homeDirectory: homeDirectory
         )
+        Log.settings.debug("resolved adb path=\(url?.path ?? "none", privacy: .private)")
+        return url
+    }
+
+    private var currentPollInterval: Duration {
+        if devices.contains(where: { $0.operation.isInFlight }) { return ADBPolling.connecting }
+        return isPopoverOpen ? ADBPolling.popoverOpen : ADBPolling.background
     }
 
     private func waitForNextInterval() async {
-        let interval: Duration = isPopoverOpen ? .seconds(2) : .seconds(10)
+        let interval = currentPollInterval
+        Log.devices.debug("poll sleep interval=\(interval.inMilliseconds, privacy: .public)ms")
         let wait = Task { [clock] in
             try await clock.sleep(for: interval)
         }

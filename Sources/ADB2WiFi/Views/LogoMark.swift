@@ -1,14 +1,19 @@
 import AppKit
 import SwiftUI
 
-/// Phone silhouette with a Wi-Fi chevron lifting off the top-right.
+/// Phone silhouette with Wi-Fi arcs lifting off the top-right.
 struct LogoMark: View {
+    var connected: Bool = false
+
     var body: some View {
         Canvas { context, size in
             let bounds = CGRect(origin: .zero, size: size)
             let line = max(1.1, size.width * 0.085)
             let phone = LogoMarkGeometry.phoneRect(in: bounds)
-            let phonePath = Path(roundedRect: phone, cornerSize: CGSize(width: phone.width * 0.22, height: phone.width * 0.22))
+            let phonePath = Path(
+                roundedRect: phone,
+                cornerSize: CGSize(width: phone.width * 0.22, height: phone.width * 0.22)
+            )
             context.stroke(
                 phonePath,
                 with: .foreground,
@@ -33,16 +38,26 @@ struct LogoMark: View {
                     style: StrokeStyle(lineWidth: line * 0.85, lineCap: .round)
                 )
             }
+
+            if connected {
+                let dot = CGRect(
+                    x: phone.maxX - size.width * 0.12,
+                    y: phone.maxY - size.height * 0.10,
+                    width: size.width * 0.13,
+                    height: size.width * 0.13
+                )
+                context.fill(Path(ellipseIn: dot), with: .foreground)
+            }
         }
         .aspectRatio(1, contentMode: .fit)
         .accessibilityHidden(true)
     }
 
     @MainActor
-    static func menuBarTemplate() -> NSImage {
+    static func menuBarTemplate(connected: Bool = false) -> NSImage {
         let point = CGSize(width: 18, height: 18)
         let renderer = ImageRenderer(content:
-            LogoMark()
+            LogoMark(connected: connected)
                 .foregroundStyle(.black)
                 .frame(width: point.width, height: point.height)
         )

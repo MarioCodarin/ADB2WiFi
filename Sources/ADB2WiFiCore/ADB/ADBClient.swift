@@ -26,7 +26,7 @@ public struct ADBClient: Sendable {
         return DeviceListParser.parse(result.stdout)
     }
 
-    public func tcpip(serial: String, port: Int = 5555) async throws {
+    public func tcpip(serial: String, port: Int = Endpoint.defaultPort) async throws {
         let result = try await invoke(["-s", serial, "tcpip", String(port)])
         try requireZero(result)
     }
@@ -65,14 +65,33 @@ public struct ADBClient: Sendable {
     }
 
     private func invoke(_ arguments: [String], timeout: Duration = defaultTimeout) async throws -> CommandResult {
-        let result = try await runner.run(executable: executable, arguments: arguments, timeout: timeout)
-        if arguments.first == "-s" {
-            let haystack = result.stdout + "\n" + result.stderr
-            if haystack.range(of: "unauthorized", options: .caseInsensitive) != nil {
-                throw ADBError.unauthorized
+        let verb = Self.verb(arguments)
+        let target = Self.target(arguments)
+        let started = ContinuousClock.now
+        Log.adb.debug(
+            "exec verb=\(verb, privacy: .public) target=\(target, privacy: .private) timeout=\(timeout.inMilliseconds, privacy: .public)ms"
+        )
+
+        do {
+            let result = try await runner.run(executable: executable, arguments: arguments, timeout: timeout)
+            let elapsed = (ContinuousClock.now - started).inMilliseconds
+            Log.adb.debug(
+                "exit verb=\(verb, privacy: .public) code=\(result.exitCode, privacy: .public) duration=\(elapsed, privacy: .public)ms"
+            )
+            if arguments.first == "-s" {
+                let haystack = result.stdout + "\n" + result.stderr
+                if haystack.range(of: "unauthorized", options: .caseInsensitive) != nil {
+                    throw ADBError.unauthorized
+                }
             }
+            return result
+        } catch {
+            let elapsed = (ContinuousClock.now - started).inMilliseconds
+            Log.adb.error(
+                "failed verb=\(verb, privacy: .public) duration=\(elapsed, privacy: .public)ms error=\(String(describing: error), privacy: .private)"
+            )
+            throw error
         }
-        return result
     }
 
     private func requireZero(_ result: CommandResult) throws {
@@ -81,18 +100,40 @@ public struct ADBClient: Sendable {
         }
     }
 
+    private static func verb(_ arguments: [String]) -> String {
+        arguments.first == "-s" ? (arguments.count > 2 ? arguments[2] : "shell") : arguments.first ?? "adb"
+    }
+
+    private static func target(_ arguments: [String]) -> String {
+        if arguments.first == "-s", arguments.count > 1 { return arguments[1] }
+        if arguments.first == "connect" || arguments.first == "disconnect", arguments.count > 1 {
+            return arguments[1]
+        }
+        return "-"
+    }
+
     private static func isConnectSuccess(_ stdout: String) -> Bool {
         stdout.range(of: #"(already )?connected to "#, options: .regularExpression) != nil
     }
 
+    /// Prefer the Platform Tools `Version 37.0.1` line; fall back to the ADB protocol line.
     private static func parseVersion(_ stdout: String) -> String? {
-        let marker = "Android Debug Bridge version "
+        let protocolMarker = "Android Debug Bridge version "
+        let platformToolsMarker = "Version "
+        var protocolVersion: String?
         for line in stdout.split(whereSeparator: \.isNewline) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard trimmed.hasPrefix(marker) else { continue }
-            let version = trimmed.dropFirst(marker.count).prefix(while: { $0.isNumber || $0 == "." })
-            if !version.isEmpty { return String(version) }
+            if trimmed.hasPrefix(platformToolsMarker) {
+                let version = trimmed.dropFirst(platformToolsMarker.count)
+                    .prefix(while: { $0.isNumber || $0 == "." })
+                if !version.isEmpty { return String(version) }
+            }
+            if trimmed.hasPrefix(protocolMarker) {
+                let version = trimmed.dropFirst(protocolMarker.count)
+                    .prefix(while: { $0.isNumber || $0 == "." })
+                if !version.isEmpty { protocolVersion = String(version) }
+            }
         }
-        return nil
+        return protocolVersion
     }
 }

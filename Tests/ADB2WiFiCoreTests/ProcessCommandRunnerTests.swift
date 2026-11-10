@@ -48,3 +48,15 @@ import Testing
     )
     #expect(result.exitCode != 0)
 }
+
+@Test func capsVeryLargeOutput() async throws {
+    let runner = ProcessCommandRunner()
+    let result = try await runner.run(
+        executable: URL(fileURLWithPath: "/usr/bin/seq"),
+        arguments: ["1", "200000"],
+        timeout: .seconds(5)
+    )
+    #expect(result.exitCode == 0)
+    #expect(result.stdout.contains("[output truncated at 256 KB]"))
+    #expect(result.stdout.utf8.count < 300_000)
+}

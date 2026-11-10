@@ -7,7 +7,6 @@ public final class ConnectionCoordinator {
 
     private static let connectDeadline: Duration = .seconds(20)
     private static let retryDelay: Duration = .milliseconds(500)
-    private static let defaultPort = 5555
 
     private let store: DeviceStore
     private let clock: any Sleeping
@@ -15,6 +14,8 @@ public final class ConnectionCoordinator {
 
     private var connectingIdentities: Set<DeviceIdentity> = []
     private var lastAddressByIdentity: [DeviceIdentity: String] = [:]
+
+    private var port: Int { store.port }
 
     public init(
         store: DeviceStore,
@@ -42,36 +43,60 @@ public final class ConnectionCoordinator {
     }
 
     public func connect(identity: DeviceIdentity, manualAddress: String? = nil) async {
-        guard !connectingIdentities.contains(identity) else { return }
+        guard !connectingIdentities.contains(identity) else {
+            Log.connection.debug("connect ignored: already in flight")
+            return
+        }
         guard let client = requireClient(for: identity) else { return }
         connectingIdentities.insert(identity)
         defer { connectingIdentities.remove(identity) }
 
+        let started = ContinuousClock.now
+        Log.connection.notice(
+            "connect start device=\(identity.serialNo, privacy: .private) manual=\(manualAddress != nil, privacy: .public) port=\(self.port, privacy: .public)"
+        )
+
         do {
             try await runConnect(identity: identity, manualAddress: manualAddress, client: client)
+            Log.connection.notice(
+                "connect ok device=\(identity.serialNo, privacy: .private) duration=\((ContinuousClock.now - started).inMilliseconds, privacy: .public)ms"
+            )
         } catch is CancellationError {
+            Log.connection.notice("connect cancelled device=\(identity.serialNo, privacy: .private)")
             return
         } catch {
-            fail(identity, AppError(mapping: error))
+            let appError = AppError(mapping: error)
+            Log.connection.error(
+                "connect failed device=\(identity.serialNo, privacy: .private) error=\(String(describing: appError), privacy: .private) duration=\((ContinuousClock.now - started).inMilliseconds, privacy: .public)ms"
+            )
+            fail(identity, appError)
         }
     }
 
     public func disconnect(identity: DeviceIdentity) async {
         guard var device = store.device(for: identity) else { return }
         let endpoint = device.network?.serial ?? lastAddressByIdentity[identity]
-        guard let endpoint else { return }
+        guard let endpoint else {
+            Log.connection.debug("disconnect ignored: no endpoint")
+            return
+        }
         guard let client = requireClient(for: identity) else { return }
+        Log.connection.notice("disconnect device=\(identity.serialNo, privacy: .private)")
         do {
             try await client.disconnect(endpoint: endpoint)
         } catch is CancellationError {
             return
         } catch {
-            fail(identity, AppError(mapping: error))
+            let appError = AppError(mapping: error)
+            Log.connection.error("disconnect failed error=\(String(describing: appError), privacy: .private)")
+            fail(identity, appError)
             return
         }
         device.network = nil
         device.operation = .idle
         store.update(device)
+        lastAddressByIdentity[identity] = nil
+        Log.connection.notice("disconnect ok")
     }
 
     /// Re-discovers the Wi-Fi IPv4 over USB. `lastAddressByIdentity` is disconnect-only.
@@ -79,7 +104,15 @@ public final class ConnectionCoordinator {
         await connect(identity: identity)
     }
 
+    /// Clears a prompt or failure. A running connection is not interruptible from the UI.
+    public func cancel(identity: DeviceIdentity) {
+        guard !connectingIdentities.contains(identity) else { return }
+        update(identity) { $0.operation = .idle }
+        Log.connection.notice("connect prompt cleared")
+    }
+
     private func runConnect(identity: DeviceIdentity, manualAddress: String?, client: ADBClient) async throws {
+        let port = self.port
         guard let snapshot = store.device(for: identity) else {
             throw AppError.usbRemoved
         }
@@ -103,26 +136,27 @@ public final class ConnectionCoordinator {
 
         let endpoint: String
         if let manual = manualAddress {
-            guard let parsed = Self.normalizedEndpoint(manual) else {
+            guard let parsed = Endpoint.normalize(manual, defaultPort: port) else {
                 throw AppError.missingWiFiAddress
             }
             endpoint = parsed
         } else if let unambiguous = WiFiAddressParser.unambiguous(addresses) {
-            endpoint = "\(unambiguous.ipv4):\(Self.defaultPort)"
+            endpoint = "\(unambiguous.ipv4):\(port)"
         } else if addresses.isEmpty {
             throw AppError.missingWiFiAddress
         } else {
-            let suggested = Self.suggestedIPv4(from: addresses)
+            let suggested = Endpoint.suggestedIPv4(from: addresses)
             update(identity) { $0.operation = .awaitingAddress(suggested: suggested) }
             return
         }
 
         lastAddressByIdentity[identity] = endpoint
+        Log.connection.debug("endpoint selected endpoint=\(endpoint, privacy: .private)")
 
         try await ensureUSBPresent(serial: usbSerial, client: client)
 
         update(identity) { $0.operation = .connecting(.enablingWifi) }
-        try await client.tcpip(serial: usbSerial, port: Self.defaultPort)
+        try await client.tcpip(serial: usbSerial, port: port)
 
         update(identity) { $0.operation = .connecting(.connecting) }
         try await connectWithRetry(endpoint: endpoint, client: client)
@@ -130,6 +164,7 @@ public final class ConnectionCoordinator {
         update(identity) { $0.operation = .connecting(.verifying) }
         let remoteSerial = try await client.serialNo(serial: endpoint)
         guard !remoteSerial.isEmpty, remoteSerial == capturedSerialNo else {
+            Log.connection.error("identity mismatch")
             try await disconnectMismatchedEndpoint(endpoint, client: client)
             throw AppError.identityMismatch
         }
@@ -148,6 +183,7 @@ public final class ConnectionCoordinator {
             throw CancellationError()
         } catch {
             // Still fail as identityMismatch; the connect must not remain sticky.
+            Log.connection.error("endpoint cleanup failed error=\(String(describing: error), privacy: .private)")
         }
     }
 
@@ -170,12 +206,15 @@ public final class ConnectionCoordinator {
     /// `adb connect` timeout is the remaining 20s budget, not a fresh 8s that can overrun it.
     private func connectWithRetry(endpoint: String, client: ADBClient) async throws {
         let deadline = clock.now + Self.connectDeadline
+        var attempt = 0
         while true {
             let now = clock.now
             if now >= deadline {
                 throw AppError.unreachableEndpoint
             }
+            attempt += 1
             let remaining = deadline - now
+            Log.connection.debug("connect attempt=\(attempt, privacy: .public)")
             do {
                 try await client.connect(endpoint: endpoint, timeout: remaining)
                 return
@@ -197,6 +236,7 @@ public final class ConnectionCoordinator {
 
     private func requireClient(for identity: DeviceIdentity) -> ADBClient? {
         guard let client = clientProvider() else {
+            Log.connection.error("connect failed: adb missing")
             fail(identity, .missingADB)
             return nil
         }
@@ -205,37 +245,25 @@ public final class ConnectionCoordinator {
 
     private func update(_ identity: DeviceIdentity, _ body: (inout Device) -> Void) {
         guard var device = store.device(for: identity) else { return }
+        let before = device.operation
         body(&device)
+        if before != device.operation {
+            Log.connection.debug("state=\(Self.label(for: device.operation), privacy: .public)")
+        }
         store.update(device)
+    }
+
+    private static func label(for operation: OperationState) -> String {
+        switch operation {
+        case .idle: "idle"
+        case .connecting(let step): "connecting.\(step.rawValue)"
+        case .awaitingAddress: "awaitingAddress"
+        case .readyToUnplug: "readyToUnplug"
+        case .failed(let error): "failed.\(error.title)"
+        }
     }
 
     private func fail(_ identity: DeviceIdentity, _ error: AppError) {
         update(identity) { $0.operation = .failed(error) }
-    }
-
-    /// `#.#.#.#` (octets 0-255), optional `:port` (1-65535); append the default port when omitted.
-    private static func normalizedEndpoint(_ raw: String) -> String? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let match = trimmed.wholeMatch(of: /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?::(\d{1,5}))?$/) else {
-            return nil
-        }
-        let octets = [match.1, match.2, match.3, match.4].compactMap { Int($0) }
-        guard octets.count == 4, octets.allSatisfy({ $0 <= 255 }) else { return nil }
-        var port = defaultPort
-        if let rawPort = match.5 {
-            guard let parsed = Int(rawPort), (1...65535).contains(parsed) else { return nil }
-            port = parsed
-        }
-        return "\(octets.map(String.init).joined(separator: ".")):\(port)"
-    }
-
-    /// Prefer the first `wlan*` / `wifi*` (not `swlan*`); otherwise the first Wi-Fi-like address.
-    private static func suggestedIPv4(from addresses: [WiFiAddress]) -> String? {
-        if let preferred = addresses.first(where: {
-            $0.interface.hasPrefix("wlan") || $0.interface.hasPrefix("wifi")
-        }) {
-            return preferred.ipv4
-        }
-        return addresses.first?.ipv4
     }
 }

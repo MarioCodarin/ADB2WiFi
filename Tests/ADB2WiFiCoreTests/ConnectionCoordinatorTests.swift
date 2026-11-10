@@ -3,7 +3,7 @@ import Testing
 @testable import ADB2WiFiCore
 
 private let fakeADB = URL(fileURLWithPath: "/tmp/adb2wifi-test-adb")
-private let pixel = Device.fixtureUSBAuthorized
+private let pixel = Device.testUSBAuthorized
 private let samsung = Device(
     identity: DeviceIdentity(serialNo: "TEST00000002"),
     model: "Pixel 8",
@@ -63,10 +63,12 @@ private struct ExistsSet: FileChecking {
 @MainActor
 private func makeHarness(
     runner: FakeCommandRunner,
-    clock: any Sleeping = ImmediateClock()
+    clock: any Sleeping = ImmediateClock(),
+    port: Int = 5555
 ) -> (DeviceStore, ConnectionCoordinator) {
     let settings = AppSettings(storage: InMemoryDefaults())
     settings.adbPathOverride = fakeADB
+    settings.port = port
     let store = DeviceStore(
         settings: settings,
         runner: runner,
@@ -532,4 +534,29 @@ func retryRereadsWifiAddressInsteadOfReusingLastIP() async {
     #expect(device?.network?.serial == "192.0.2.99:5555")
     #expect(device?.operation == .readyToUnplug)
     #expect(runner.connectEndpoints == ["192.0.2.42:5555", "192.0.2.99:5555"])
+}
+
+
+@Test @MainActor
+func customPortIsUsedForTcpipAndEndpoint() async {
+    let runner = FakeCommandRunner(handlers: [
+        { _ in ok(pixelUSBListing) },
+        { _ in ok("TEST00000001\n") },
+        { _ in ok("Pixel 8\n") },
+        { _ in ok(wlan0Only) },
+        { _ in ok(pixelUSBListing) },
+        { _ in ok("restarting in TCP mode port: 6000\n") },
+        { _ in ok("connected to 192.0.2.42:6000\n") },
+        { _ in ok("TEST00000001\n") },
+    ])
+    let (store, coordinator) = makeHarness(runner: runner, port: 6000)
+    await store.refresh()
+
+    await coordinator.connect(identity: pixel.identity)
+
+    let device = store.device(for: pixel.identity)!
+    #expect(device.isWiFiConnected)
+    #expect(device.network?.serial == "192.0.2.42:6000")
+    #expect(runner.invokedCommands.contains(["-s", "TEST00000001", "tcpip", "6000"]))
+    #expect(runner.connectEndpoints == ["192.0.2.42:6000"])
 }

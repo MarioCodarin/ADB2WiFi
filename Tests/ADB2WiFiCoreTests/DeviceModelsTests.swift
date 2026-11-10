@@ -12,7 +12,7 @@ import Testing
 }
 
 @Test func wifiConnectedRequiresVerifiedNetworkTransport() {
-    var device = Device.fixtureUSBAuthorized
+    var device = Device.testUSBAuthorized
     #expect(device.isWiFiConnected == false)
     device.network = .init(serial: "192.0.2.42:5555", state: .device, verified: true)
     #expect(device.isWiFiConnected == true)

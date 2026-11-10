@@ -121,7 +121,7 @@ func unauthorizedOutputThrowsUnauthorized(stdout: String, stderr: String) async 
     }
 }
 
-@Test func versionParsesADBVersionLine() async throws {
+@Test func versionPrefersPlatformToolsVersion() async throws {
     let stdout = """
     Android Debug Bridge version 1.0.41
     Version 37.0.1-12932953
@@ -131,7 +131,7 @@ func unauthorizedOutputThrowsUnauthorized(stdout: String, stderr: String) async 
     let runner = FakeCommandRunner(handlers: [{ _ in ok(stdout) }])
     let client = ADBClient(executable: adbURL, runner: runner)
 
-    #expect(try await client.version() == "1.0.41")
+    #expect(try await client.version() == "37.0.1")
     #expect(runner.calls[0].arguments == ["version"])
     #expect(runner.calls[0].timeout == .seconds(8))
 }
@@ -161,4 +161,10 @@ func unauthorizedOutputThrowsUnauthorized(stdout: String, stderr: String) async 
     #expect(runner.calls[0].arguments == ["-s", "USB123", "shell", "ip -o -4 addr show up"])
     #expect(runner.calls[0].timeout == .seconds(8))
     #expect(addresses == [WiFiAddress(interface: "wlan0", ipv4: "192.0.2.42")])
+}
+
+@Test func versionFallsBackToProtocolLine() async throws {
+    let runner = FakeCommandRunner(handlers: [{ _ in ok("Android Debug Bridge version 1.0.41\n") }])
+    let client = ADBClient(executable: adbURL, runner: runner)
+    #expect(try await client.version() == "1.0.41")
 }

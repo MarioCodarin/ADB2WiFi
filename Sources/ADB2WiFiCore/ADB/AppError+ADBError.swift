@@ -1,5 +1,3 @@
-import Foundation
-
 extension AppError {
     /// Maps any error thrown by the ADB layer to user-facing guidance.
     init(mapping error: Error) {
@@ -14,6 +12,8 @@ extension AppError {
             self = .authorizationPending
         case ADBError.missingExecutable:
             self = .missingADB
+        case ADBError.launchFailed(let message):
+            self = .adbLaunchFailed(message)
         case ADBError.unparseable(let output):
             self = .adbOutput(output)
         case ADBError.nonZeroExit(let result):

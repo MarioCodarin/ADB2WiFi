@@ -11,25 +11,7 @@ let package = Package(
     targets: [
         .target(name: "ADB2WiFiCore"),
         .executableTarget(name: "ADB2WiFi", dependencies: ["ADB2WiFiCore"]),
-        .testTarget(
-            name: "ADB2WiFiCoreTests",
-            dependencies: ["ADB2WiFiCore"],
-            // CLT SwiftPM passes `-I` for Testing.framework; Swift needs `-F` to import the module.
-            swiftSettings: [
-                .unsafeFlags([
-                    "-F", "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
-                ])
-            ],
-            linkerSettings: [
-                .unsafeFlags([
-                    "-F", "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
-                    "-Xlinker", "-rpath",
-                    "-Xlinker", "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
-                    "-Xlinker", "-rpath",
-                    "-Xlinker", "/Library/Developer/CommandLineTools/Library/Developer/usr/lib",
-                ])
-            ]
-        ),
+        .testTarget(name: "ADB2WiFiCoreTests", dependencies: ["ADB2WiFiCore"]),
     ],
     swiftLanguageModes: [.v6]
 )

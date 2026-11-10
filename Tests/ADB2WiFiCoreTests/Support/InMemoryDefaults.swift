@@ -8,6 +8,10 @@ final class InMemoryDefaults: DefaultsStorage {
         values[defaultName] as? String
     }
 
+    func integer(forKey defaultName: String) -> Int {
+        values[defaultName] as? Int ?? 0
+    }
+
     func set(_ value: Any?, forKey defaultName: String) {
         if let value {
             values[defaultName] = value

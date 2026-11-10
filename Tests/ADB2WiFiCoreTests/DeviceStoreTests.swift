@@ -366,7 +366,7 @@ func refreshVersionClearsWhenADBMissing() async {
 }
 
 @Test @MainActor
-func startPollsAtTwoSecondsOpenAndTenSecondsClosed() async {
+func startPollsAtThreeSecondsOpenAndSixtySecondsClosed() async {
     let listing = """
     List of devices attached
     """
@@ -383,7 +383,7 @@ func startPollsAtTwoSecondsOpenAndTenSecondsClosed() async {
     while clock.durations.isEmpty && ContinuousClock.now - started < .seconds(1) {
         try? await Task.sleep(for: .milliseconds(5))
     }
-    #expect(clock.durations.first == .seconds(2))
+    #expect(clock.durations.first == ADBPolling.popoverOpen)
 
     store.isPopoverOpen = false
     store.stop()
@@ -392,7 +392,7 @@ func startPollsAtTwoSecondsOpenAndTenSecondsClosed() async {
     while clock.durations.count < 2 && ContinuousClock.now - restarted < .seconds(1) {
         try? await Task.sleep(for: .milliseconds(5))
     }
-    #expect(clock.durations.last == .seconds(10))
+    #expect(clock.durations.last == ADBPolling.background)
     store.stop()
 }
 
@@ -468,37 +468,31 @@ func userInitiatedRefreshSetsIsRefreshingUntilComplete() async {
 }
 
 @Test @MainActor
-func overlappingUserRefreshKeepsIsRefreshingUntilLastCompletes() async {
-    let first = RefreshGate()
-    let second = RefreshGate()
+func concurrentRefreshesShareOneADBCall() async {
+    let gate = RefreshGate()
     let listing = """
     List of devices attached
     """
     let runner = FakeCommandRunner(handlers: [
         { _ in
-            await first.waitToProceed()
-            return ok(listing)
-        },
-        { _ in
-            await second.waitToProceed()
+            await gate.waitToProceed()
             return ok(listing)
         },
     ])
     let store = makeStore(runner: runner)
 
     let task1 = Task { await store.refresh(userInitiated: true) }
-    await first.waitUntilArrived()
+    await gate.waitUntilArrived()
     let task2 = Task { await store.refresh(userInitiated: true) }
-    await second.waitUntilArrived()
-    #expect(store.isRefreshing == true)
+    try? await Task.sleep(for: .milliseconds(20))
 
-    first.release()
+    #expect(store.isRefreshing == true)
+    gate.release()
     await task1.value
-    #expect(store.isRefreshing == true)
-
-    second.release()
     await task2.value
+
     #expect(store.isRefreshing == false)
+    #expect(runner.calls.count == 1)
 }
 
 @Test @MainActor

@@ -1,0 +1,73 @@
+name: Bug report
+description: Something in ADB2WiFi did not work as expected.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please remove real serial numbers, IP addresses, and
+        account names before submitting. **Copy diagnostics** in Settings already
+        redacts them.
+
+  - type: input
+    id: app-version
+    attributes:
+      label: ADB2WiFi version
+      description: Shown at the bottom of Settings.
+      placeholder: "0.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "14.6.1"
+    validations:
+      required: true
+
+  - type: input
+    id: adb
+    attributes:
+      label: ADB path and version
+      description: Output of `adb version`, or "not installed".
+      placeholder: "/opt/homebrew/bin/adb — 37.0.1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Plug in a phone with USB debugging enabled.
+        2. Open ADB2WiFi and press Connect over Wi-Fi.
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual
+      placeholder: Expected the card to say "You're on Wi-Fi"; it stayed on "Connecting".
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics (optional)
+      description: Paste the result of Settings → Copy diagnostics. It contains no serials or IPs.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues.
+          required: true
+        - label: I removed real serial numbers, IP addresses, and personal data.
+          required: true
