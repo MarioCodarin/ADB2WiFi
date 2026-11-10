@@ -19,7 +19,8 @@ There are no third-party dependencies. Swift 6 language mode, macOS 14+.
 SwiftUI `App`/`Settings` scene was removed because newer SDKs create a hidden
 Settings window for it; the whole UI is hosted in an `NSPopover` instead.
 
-The delegate owns four long-lived objects:
+The app keeps four long-lived objects alive. The `StatusItemController` retains
+`AppSettings`, `DeviceStore`, and `ConnectionCoordinator`:
 
 - **`AppSettings`** — `adbPathOverride` and `port`, persisted in `UserDefaults`.
 - **`DeviceStore`** — polling, identity/model caches, merged device list.
