@@ -86,22 +86,26 @@ struct PopoverRootView: View {
                 onChooseADB: onChooseADB,
                 onOpenSettings: { showSettings() }
             )
-        } else if store.devices.isEmpty {
+        } else if store.devices.isEmpty, recentConnections.isEmpty {
             SetupView(
                 adbPath: store.adbPath,
                 adbVersion: store.adbVersion,
                 onChooseADB: onChooseADB,
                 onOpenSettings: { showSettings() }
             )
-        } else if store.devices.count > 3 {
-            // Only very busy setups scroll; the common one-to-three-phone case renders
-            // as a single, fully visible stack.
+        } else if store.devices.count + recentConnections.count > 3 {
+            // Only very busy setups scroll; the common small case renders as a single,
+            // fully visible stack.
             ScrollView {
                 cards
             }
         } else {
             cards
         }
+    }
+
+    private var recentConnections: [RememberedDevice] {
+        Array(store.recentConnections.prefix(3))
     }
 
     private var cards: some View {
@@ -115,6 +119,22 @@ struct PopoverRootView: View {
                     onDisconnect: { disconnect(device) },
                     onCancel: { coordinator.cancel(identity: device.identity) },
                     onOpenShell: { openShell(device) }
+                )
+            }
+
+            if !recentConnections.isEmpty {
+                RecentConnectionsView(
+                    connections: recentConnections,
+                    showsEmptyHeader: store.devices.isEmpty,
+                    onReconnect: { connection in
+                        await coordinator.reconnectRemembered(
+                            identity: connection.identity,
+                            model: connection.model
+                        )
+                    },
+                    onForget: { connection in
+                        store.forgetEndpoint(for: connection.identity)
+                    }
                 )
             }
         }

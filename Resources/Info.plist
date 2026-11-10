@@ -6,31 +6,31 @@
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>ADB2WiFi</string>
-	<key>CFBundleName</key>
+	<key>CFBundleExecutable</key>
 	<string>ADB2WiFi</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>io.github.mariocodarin.ADB2WiFi</string>
-	<key>CFBundleExecutable</key>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
 	<string>ADB2WiFi</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleVersion</key>
-	<string>0.3.0</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.3.0</string>
+	<string>0.4.0</string>
+	<key>CFBundleVersion</key>
+	<string>0.4.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.developer-tools</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Mario Codarin. MIT licensed.</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
 </dict>
 </plist>

@@ -64,35 +64,37 @@ func autoReconnectDefaultsOnAndPersists() {
 }
 
 @Test @MainActor
-func rememberedEndpointsPersistAndForget() {
+func rememberedConnectionsPersistModelAndForget() {
     let storage = InMemoryDefaults()
     let settings = AppSettings(storage: storage)
-    #expect(settings.rememberedEndpoints.isEmpty)
+    #expect(settings.rememberedConnections.isEmpty)
 
-    settings.remember(endpoint: "192.0.2.42:5555", for: "TEST00000001")
+    settings.remember(endpoint: "192.0.2.42:5555", model: "Pixel 8", for: "TEST00000001")
     settings.remember(endpoint: "192.0.2.43:5555", for: "TEST00000002")
     #expect(settings.rememberedEndpoint(for: "TEST00000001") == "192.0.2.42:5555")
+    #expect(settings.rememberedConnection(for: "TEST00000001")?.model == "Pixel 8")
 
     let restored = AppSettings(storage: storage)
-    #expect(restored.rememberedEndpoints.count == 2)
+    #expect(restored.rememberedConnections.count == 2)
     #expect(restored.rememberedEndpoint(for: "TEST00000002") == "192.0.2.43:5555")
+    #expect(restored.rememberedConnection(for: "TEST00000001")?.model == "Pixel 8")
 
     restored.forgetEndpoint(for: "TEST00000001")
     #expect(restored.rememberedEndpoint(for: "TEST00000001") == nil)
-    #expect(AppSettings(storage: storage).rememberedEndpoints.count == 1)
+    #expect(AppSettings(storage: storage).rememberedConnections.count == 1)
 
     restored.clearRememberedEndpoints()
-    #expect(restored.rememberedEndpoints.isEmpty)
-    #expect(AppSettings(storage: storage).rememberedEndpoints.isEmpty)
+    #expect(restored.rememberedConnections.isEmpty)
+    #expect(AppSettings(storage: storage).rememberedConnections.isEmpty)
 }
 
 @Test @MainActor
-func rememberedEndpointsAreCapped() {
+func rememberedConnectionsAreCapped() {
     let settings = AppSettings(storage: InMemoryDefaults())
     for index in 0..<25 {
         settings.remember(endpoint: "192.0.2.\(index):5555", for: "TEST\(index)")
     }
-    #expect(settings.rememberedEndpoints.count == 20)
+    #expect(settings.rememberedConnections.count == 20)
 }
 
 @Test @MainActor
@@ -100,5 +102,39 @@ func emptyRememberedValuesAreIgnored() {
     let settings = AppSettings(storage: InMemoryDefaults())
     settings.remember(endpoint: "", for: "TEST00000001")
     settings.remember(endpoint: "192.0.2.42:5555", for: "")
-    #expect(settings.rememberedEndpoints.isEmpty)
+    #expect(settings.rememberedConnections.isEmpty)
+}
+
+@Test @MainActor
+func notifyOnReadyDefaultsOffAndPersists() {
+    let storage = InMemoryDefaults()
+    let settings = AppSettings(storage: storage)
+    #expect(settings.notifyOnReady == false)
+
+    settings.notifyOnReady = true
+    #expect(AppSettings(storage: storage).notifyOnReady)
+
+    settings.notifyOnReady = false
+    #expect(AppSettings(storage: storage).notifyOnReady == false)
+}
+
+@Test @MainActor
+func rememberingWithoutModelKeepsThePreviousModel() {
+    let settings = AppSettings(storage: InMemoryDefaults())
+    settings.remember(endpoint: "192.0.2.42:5555", model: "Pixel 8", for: "TEST00000001")
+    settings.remember(endpoint: "198.51.100.55:6000", for: "TEST00000001")
+
+    let connection = settings.rememberedConnection(for: "TEST00000001")
+    #expect(connection?.endpoint == "198.51.100.55:6000")
+    #expect(connection?.model == "Pixel 8")
+}
+
+@Test @MainActor
+func legacyRememberedEndpointJSONMigrates() {
+    let storage = InMemoryDefaults()
+    storage.set(#"{"TEST00000001":"192.0.2.42:5555"}"#, forKey: AppSettings.rememberedEndpointsKey)
+    let settings = AppSettings(storage: storage)
+
+    #expect(settings.rememberedEndpoint(for: "TEST00000001") == "192.0.2.42:5555")
+    #expect(settings.rememberedConnection(for: "TEST00000001")?.model == "")
 }

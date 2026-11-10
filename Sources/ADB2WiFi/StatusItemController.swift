@@ -11,6 +11,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let coordinator: ConnectionCoordinator
     private let onQuit: () -> Void
     private let popoverModel = PopoverModel(showingSettings: DebugFlags.showSettingsOnLaunch)
+    private var readyTracker = ReadyTracker()
     private var popover: NSPopover?
 
     init(
@@ -86,13 +87,21 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     private func observeDevices() {
         withObservationTracking {
-            _ = store.connectedCount
-            _ = store.devices.count
+            _ = store.devices
         } onChange: { [weak self] in
             Task { @MainActor in
+                self?.checkReadyNotifications()
                 self?.updateStatusIcon()
                 self?.observeDevices()
             }
+        }
+    }
+
+    private func checkReadyNotifications() {
+        let newlyReady = readyTracker.newlyReady(in: store.devices)
+        guard settings.notifyOnReady, !store.isPopoverOpen else { return }
+        for device in newlyReady {
+            ReadyNotifier.post(device: device)
         }
     }
 

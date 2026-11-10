@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.0 — 2026-11-10
+
+### Added
+
+- **Notify when ready** — opt-in local notification when a one-click connection is
+  verified while the popover is closed. Requests notification permission when enabled.
+- **Recently connected** — remembered phones appear under the active cards with
+  **Reconnect** and **Forget**. Each entry keeps the model, endpoint, and last-connected
+  time; entries that are currently listed are hidden.
+- Remembered connections migrate from the 0.3.x `serial -> endpoint` format.
+
+### Changed
+
+- Remembered metadata now includes model and last-connected time, and drives both
+  auto-reconnect and the recent list.
+- Settings shows the remembered count and a Clear action, plus the notification toggle
+  and permission guidance.
+
 ## 0.3.0 — 2026-11-10
 
 ### Added

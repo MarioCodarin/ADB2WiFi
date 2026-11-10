@@ -62,19 +62,36 @@ public final class DeviceStore {
     public var connectedCount: Int { devices.filter(\.isWiFiConnected).count }
     public var autoReconnect: Bool { settings.autoReconnect }
 
-    /// Remembered endpoint candidates, oldest order is not significant; sort for determinism.
-    public var rememberedConnections: [(identity: DeviceIdentity, endpoint: String)] {
-        settings.rememberedEndpoints
-            .sorted { $0.key < $1.key }
-            .map { (DeviceIdentity(serialNo: $0.key), $0.value) }
+    /// All remembered phones, newest first.
+    public var rememberedConnections: [RememberedDevice] {
+        settings.rememberedConnections
+            .map { serial, connection in
+                RememberedDevice(
+                    identity: DeviceIdentity(serialNo: serial),
+                    endpoint: connection.endpoint,
+                    model: connection.model,
+                    lastConnected: connection.lastConnected
+                )
+            }
+            .sorted { $0.lastConnected > $1.lastConnected }
+    }
+
+    /// Remembered phones that are not currently listed by `adb devices`.
+    public var recentConnections: [RememberedDevice] {
+        let present = Set(devices.map(\.identity))
+        return rememberedConnections.filter { !present.contains($0.identity) }
+    }
+
+    public func rememberedConnection(for identity: DeviceIdentity) -> RememberedConnection? {
+        settings.rememberedConnection(for: identity.serialNo)
     }
 
     public func rememberedEndpoint(for identity: DeviceIdentity) -> String? {
         settings.rememberedEndpoint(for: identity.serialNo)
     }
 
-    public func rememberEndpoint(_ endpoint: String, for identity: DeviceIdentity) {
-        settings.remember(endpoint: endpoint, for: identity.serialNo)
+    public func rememberEndpoint(_ endpoint: String, model: String = "", for identity: DeviceIdentity) {
+        settings.remember(endpoint: endpoint, model: model, for: identity.serialNo)
     }
 
     public func forgetEndpoint(for identity: DeviceIdentity) {

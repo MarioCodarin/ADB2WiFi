@@ -124,27 +124,26 @@ public final class ConnectionCoordinator {
         Log.connection.notice("auto-reconnect start candidates=\(candidates.count, privacy: .public)")
         let deadline = ContinuousClock.now + .seconds(6)
 
-        for (identity, endpoint) in candidates {
+        for remembered in candidates {
             if ContinuousClock.now >= deadline { break }
-            if connectingIdentities.contains(identity) { continue }
-            if let device = store.device(for: identity) {
+            if connectingIdentities.contains(remembered.identity) { continue }
+            if let device = store.device(for: remembered.identity) {
                 if device.isWiFiConnected || device.usb != nil { continue }
             }
 
             do {
-                try await client.connect(endpoint: endpoint, timeout: .seconds(3))
-                let remoteSerial = try await client.serialNo(serial: endpoint)
-                guard remoteSerial == identity.serialNo else {
+                let connected = try await attemptRememberedConnection(
+                    identity: remembered.identity,
+                    endpoint: remembered.endpoint,
+                    model: remembered.model,
+                    timeout: .seconds(3),
+                    client: client
+                )
+                if connected {
+                    Log.connection.notice("auto-reconnect ok")
+                } else {
                     Log.connection.notice("auto-reconnect skipped wrong device")
-                    continue
                 }
-                store.rememberEndpoint(endpoint, for: identity)
-                await store.refresh()
-                // A poll may already have been in flight when the endpoint came up.
-                if store.device(for: identity)?.network?.serial != endpoint {
-                    await store.refresh()
-                }
-                Log.connection.notice("auto-reconnect ok")
             } catch is CancellationError {
                 return
             } catch {
@@ -154,6 +153,57 @@ public final class ConnectionCoordinator {
             }
         }
         Log.connection.debug("auto-reconnect finished")
+    }
+
+    /// Manual retry for a row in the recent list. Returns false so the row can show a hint.
+    public func reconnectRemembered(identity: DeviceIdentity, model: String = "") async -> Bool {
+        guard let endpoint = store.rememberedEndpoint(for: identity) else { return false }
+        guard !connectingIdentities.contains(identity) else { return false }
+        guard let client = clientProvider() else { return false }
+
+        let rememberedModel = model.isEmpty
+            ? (store.rememberedConnection(for: identity)?.model ?? "")
+            : model
+        Log.connection.notice("reconnect remembered device=\(identity.serialNo, privacy: .private)")
+
+        do {
+            let connected = try await attemptRememberedConnection(
+                identity: identity,
+                endpoint: endpoint,
+                model: rememberedModel,
+                timeout: .seconds(5),
+                client: client
+            )
+            Log.connection.notice("reconnect remembered result=\(connected, privacy: .public)")
+            return connected
+        } catch is CancellationError {
+            return false
+        } catch {
+            Log.connection.info(
+                "reconnect remembered failed error=\(String(describing: error), privacy: .private)"
+            )
+            return false
+        }
+    }
+
+    private func attemptRememberedConnection(
+        identity: DeviceIdentity,
+        endpoint: String,
+        model: String,
+        timeout: Duration,
+        client: ADBClient
+    ) async throws -> Bool {
+        try await client.connect(endpoint: endpoint, timeout: timeout)
+        let remoteSerial = try await client.serialNo(serial: endpoint)
+        guard remoteSerial == identity.serialNo else { return false }
+
+        store.rememberEndpoint(endpoint, model: model, for: identity)
+        await store.refresh()
+        // A poll may already have been in flight when the endpoint came up.
+        if store.device(for: identity)?.network?.serial != endpoint {
+            await store.refresh()
+        }
+        return store.device(for: identity)?.isWiFiConnected == true
     }
 
     /// Clears a prompt or failure. A running connection is not interruptible from the UI.
@@ -224,7 +274,7 @@ public final class ConnectionCoordinator {
             device.network = Transport(serial: endpoint, state: .device, verified: true)
             device.operation = .readyToUnplug
         }
-        store.rememberEndpoint(endpoint, for: identity)
+        store.rememberEndpoint(endpoint, model: snapshot.model, for: identity)
     }
 
     /// Drop the foreign `adb connect` so Retry cannot hit `already connected to`.

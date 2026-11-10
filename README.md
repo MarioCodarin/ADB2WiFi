@@ -26,6 +26,8 @@ remote serial number before declaring success. No root, no scripts, no accounts.
 - **Native and quiet** — SwiftUI, zero third-party dependencies, no Dock icon, no main window.
 - **Private by default** — no telemetry, no cloud, no API keys. Everything stays on your Mac.
 - **Remembers your phone** — opt-out auto-reconnect tries the last verified endpoint on launch or wake.
+- **Pick up where you left off** — recent connections with model, endpoint, last-connected time, **Reconnect**, and **Forget**.
+- **Knows when it’s ready** — opt-in notification when a one-click connection is verified while the popover is closed.
 - **Quick actions** — right-click the menu-bar icon for Settings, Refresh, Launch at Login, or Quit.
 - **Hard to get wrong** — clear setup, bounded retries, identity verification, copy-ready `adb` commands, and a one-click **Shell**.
 - **Low overhead** — adaptive polling, one coalesced `adb devices` call, and no subprocesses while the Mac sleeps.
@@ -72,8 +74,11 @@ You only need the Swift toolchain from Xcode or the Command Line Tools.
 2. Plug in USB and tap **Allow** on the phone.
 3. Open ADB2WiFi and press **Connect over Wi-Fi**.
 4. When the card turns green, unplug USB. The ADB connection stays up.
-5. Next time, ADB2WiFi can reconnect automatically. Use **Shell** on a connected card
-   for a Terminal session, or right-click the menu-bar icon for quick actions.
+5. Next time, ADB2WiFi can reconnect automatically. Recent phones stay visible under
+   **Recently connected** with **Reconnect** and **Forget**. Use **Shell** on a connected
+   card for a Terminal session, or right-click the menu-bar icon for quick actions.
+
+<p align="center"><img src="docs/screenshot-recent.png" width="300" alt="Recently connected phones with reconnect and forget actions"></p>
 
 If ADB is missing, the popover becomes a setup screen with a path picker and a
 copy-ready Homebrew command. No terminal required.
@@ -88,6 +93,7 @@ Everything is in the popover's **Settings** pane.
 | **Port** | Port used by `adb tcpip` and the generated endpoint. Default `5555`. |
 | **Launch at login** | Starts ADB2WiFi quietly when you log in. |
 | **Reconnect remembered phones** | Tries the last verified Wi-Fi endpoint on launch or wake. On by default. |
+| **Notify when ready** | One local notification when a connection is verified and the popover is closed. Off by default. |
 | **Copy diagnostics** | Copies a redacted support report (no serials, IPs, or usernames). |
 
 <p align="center"><img src="docs/screenshot-settings.png" width="300" alt="ADB2WiFi settings pane"></p>
@@ -130,7 +136,8 @@ an established Wi-Fi connection. Explicit **Disconnect** forgets the remembered 
 ## Privacy
 
 - No analytics, telemetry, accounts, or cloud calls. The only network traffic is ADB to your phone.
-- Remembered serial/endpoint pairs stay in local `UserDefaults` and can be cleared in Settings.
+- Remembered serial, model, and endpoint metadata stay in local `UserDefaults` and can be cleared in Settings.
+- Ready notifications are local-only; their body contains no serial or endpoint.
 - Serial numbers and IP addresses are logged as private values in the unified log.
 - **Copy diagnostics** redacts your home directory and contains no device identifiers.
 - See [SECURITY.md](SECURITY.md) for the full data story.
@@ -164,7 +171,7 @@ connect start manual=false port=5555
 
 ```sh
 swift build                        # debug build
-bash Scripts/test.sh               # 140 Swift Testing tests
+bash Scripts/test.sh               # 148 Swift Testing tests
 bash Scripts/package-app.sh        # arm64 app in dist/
 bash Scripts/package-app.sh --universal
 bash Scripts/release.sh            # universal zip + SHA-256

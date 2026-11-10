@@ -516,3 +516,16 @@ func backgroundRefreshDoesNotSetIsRefreshing() async {
     await task.value
     #expect(store.isRefreshing == false)
 }
+
+@Test @MainActor
+func recentConnectionsExcludeCurrentlyListedDevices() {
+    let store = makeStore(runner: FakeCommandRunner())
+    let identity = DeviceIdentity(serialNo: "TEST00000001")
+    store.rememberEndpoint("192.0.2.42:5555", model: "Pixel 8", for: identity)
+    #expect(store.recentConnections.count == 1)
+    #expect(store.recentConnections[0].model == "Pixel 8")
+    #expect(store.recentConnections[0].endpoint == "192.0.2.42:5555")
+
+    store.update(Device.testUSBAuthorized)
+    #expect(store.recentConnections.isEmpty)
+}

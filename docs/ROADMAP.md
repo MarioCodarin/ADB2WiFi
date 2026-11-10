@@ -12,6 +12,13 @@ visible state that a non-expert never has to guess what went wrong.
 4. **Stay quiet.** No Dock icon, no notifications unless asked, no polling you can feel.
 5. **Local-first.** No account, no cloud, no telemetry.
 
+## Shipped in 0.4.0
+
+- Opt-in "ready" notification, posted only while the popover is closed.
+- Recently connected list with model, endpoint, relative time, Reconnect, and Forget.
+- Remembered metadata migration from the 0.3.x serial/endpoint shape.
+- Notification permission guidance in Settings.
+
 ## Shipped in 0.3.0
 
 - Opt-out auto-reconnect of the last verified endpoint on launch and wake.
@@ -39,9 +46,8 @@ Scored by user value vs. effort. This is a brainstorm, not a commitment.
 | Idea | Value | Effort | Notes |
 |---|---|---|---|
 | **Android 11+ wireless debugging pairing** | High | High | `adb pair` flow with a pairing code / QR. Different UX from USB-initiated `tcpip`; should be a second card action. |
-| **Notifications on ready** | Medium | Low | One notification when a connection becomes verified, especially if the popover is closed. Must be opt-in. |
-| **Recently connected card** | Medium | Low | Show a remembered phone even when it is not currently reachable, with Reconnect and Forget actions. |
 | **Multiple ports / profiles** | Medium | Medium | Useful for emulators and unusual devices. Keep the default 5555 and add a per-device override. |
+| **Notification actions** | Low | Low | Add a "Open ADB2WiFi" action to the ready notification. |
 | **Localization** | Medium | Medium | The UI copy is short and centralized in `AppError` / `SetupView`; good candidate for `.strings`. |
 | **Homebrew cask** | Medium | Low | Once notarized. A cask makes `brew install --cask adb2wifi` possible. |
 | **Notarized release + Sparkle updates** | Medium | Medium | Requires a Developer ID. Removes the right-click-Open caveat. |

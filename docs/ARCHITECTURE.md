@@ -72,7 +72,8 @@ Invariants:
 
 ## Auto-reconnect
 
-Successful connections store `serialNo -> ip:port` in local `UserDefaults`. On launch
+Successful connections store `serialNo -> RememberedConnection` (endpoint, model, last-connected
+date) in local `UserDefaults`. On launch
 and on wake, `ConnectionCoordinator.reconnectRememberedEndpoints()` quietly tries each
 remembered endpoint that is not already connected or attached over USB:
 
@@ -85,6 +86,22 @@ adb connect <endpoint> (3 s timeout)
 It has a 6-second total budget, skips anything already on Wi-Fi, and never surfaces a
 failure as a global error. Explicit **Disconnect** removes the entry; Settings has a
 Clear button. The list is capped at 20 and diagnostics never include it.
+
+## Recently connected
+
+`DeviceStore.recentConnections` filters remembered entries whose identity is currently
+listed in `adb devices`. The popover shows up to three under **Recently connected**,
+with a manual reconnect (5 s timeout, same identity check) and Forget. The manual
+reconnect returns a boolean so the row can show "Not reachable" instead of a global
+error. This also covers the case where auto-reconnect ran before Wi-Fi was available.
+
+## Ready notifications
+
+`ReadyTracker` (core) records which identities have crossed into `readyToUnplug` and
+returns only newly ready devices. `StatusItemController` updates it on every device
+change and posts through `ReadyNotifier` only when `notifyOnReady` is enabled and the
+popover is closed. The notification body has the model name only — no serial or endpoint.
+Authorization is requested when the user enables the toggle; denial turns it back off.
 
 ## Polling and resource use
 

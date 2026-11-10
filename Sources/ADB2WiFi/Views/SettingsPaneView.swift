@@ -9,6 +9,7 @@ struct SettingsPaneView: View {
 
     @ViewState private var launchAtLogin = LaunchAtLogin.isEnabled || LaunchAtLogin.requiresApproval
     @ViewState private var launchAtLoginError: String?
+    @ViewState private var notificationsError: String?
 
     private var resolvedADB: URL? { store.resolvedExecutable() }
 
@@ -205,13 +206,13 @@ struct SettingsPaneView: View {
                 .controlSize(.small)
                 .accessibilityHint("Tries the last verified Wi-Fi endpoint when ADB2WiFi launches or wakes.")
 
-            if settings.rememberedEndpoints.isEmpty {
+            if settings.rememberedConnections.isEmpty {
                 Text("No remembered endpoints yet. Connect a phone over Wi-Fi once.")
                     .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
             } else {
                 HStack(spacing: 6) {
-                    Text("\(settings.rememberedEndpoints.count) remembered endpoint\(settings.rememberedEndpoints.count == 1 ? "" : "s")")
+                    Text("\(settings.rememberedConnections.count) remembered phone\(settings.rememberedConnections.count == 1 ? "" : "s")")
                         .font(.system(size: 9))
                         .foregroundStyle(.tertiary)
                     Spacer()
@@ -221,6 +222,41 @@ struct SettingsPaneView: View {
                         .foregroundStyle(Theme.accent)
                         .accessibilityLabel("Clear remembered endpoints")
                 }
+            }
+
+            Toggle("Notify when ready", isOn: Binding(
+                get: { settings.notifyOnReady },
+                set: { newValue in
+                    settings.notifyOnReady = newValue
+                    guard newValue else {
+                        notificationsError = nil
+                        return
+                    }
+                    Task {
+                        let granted = await ReadyNotifier.requestAuthorization()
+                        if granted {
+                            notificationsError = nil
+                        } else {
+                            settings.notifyOnReady = false
+                            notificationsError = "Allow notifications for ADB2WiFi in System Settings."
+                        }
+                    }
+                }
+            ))
+            .font(.system(size: 11))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .accessibilityHint("Posts one notification when a phone becomes ready, while the popover is closed.")
+
+            Text("Only when the popover is closed.")
+                .font(.system(size: 9))
+                .foregroundStyle(.tertiary)
+
+            if let notificationsError {
+                Text(notificationsError)
+                    .font(.system(size: 9))
+                    .foregroundStyle(Theme.warning)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
