@@ -4,18 +4,18 @@ import SwiftUI
 struct PopoverRootView: View {
     @Bindable var settings: AppSettings
     @Bindable var store: DeviceStore
+    @Bindable var model: PopoverModel
     var coordinator: ConnectionCoordinator
     var onQuit: () -> Void
     var onChooseADB: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ViewState private var showingSettings = DebugFlags.showSettingsOnLaunch
 
     var body: some View {
         Group {
-            if showingSettings {
+            if model.showingSettings {
                 SettingsPaneView(settings: settings, store: store, onChooseADB: onChooseADB) {
-                    showingSettings = false
+                    model.showingSettings = false
                     Task { await store.refresh(userInitiated: true) }
                 }
             } else {
@@ -113,7 +113,8 @@ struct PopoverRootView: View {
                     onRetry: { retry(device) },
                     onContinue: { address in continueConnect(device, address: address) },
                     onDisconnect: { disconnect(device) },
-                    onCancel: { coordinator.cancel(identity: device.identity) }
+                    onCancel: { coordinator.cancel(identity: device.identity) },
+                    onOpenShell: { openShell(device) }
                 )
             }
         }
@@ -144,9 +145,9 @@ struct PopoverRootView: View {
 
     private func showSettings() {
         if reduceMotion {
-            showingSettings = true
+            model.showingSettings = true
         } else {
-            withAnimation(.easeInOut(duration: 0.18)) { showingSettings = true }
+            withAnimation(.easeInOut(duration: 0.18)) { model.showingSettings = true }
         }
     }
 
@@ -171,5 +172,10 @@ struct PopoverRootView: View {
 
     private func disconnect(_ device: Device) {
         Task { await coordinator.disconnect(identity: device.identity) }
+    }
+
+    private func openShell(_ device: Device) {
+        guard let endpoint = device.network?.serial else { return }
+        TerminalLauncher.openShell(adbPath: store.adbPath, endpoint: endpoint)
     }
 }

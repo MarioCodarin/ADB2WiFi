@@ -7,6 +7,15 @@ enum LaunchAtLogin {
         SMAppService.mainApp.status == .enabled
     }
 
+    /// Registered, but macOS is waiting for the user to approve the login item.
+    static var requiresApproval: Bool {
+        SMAppService.mainApp.status == .requiresApproval
+    }
+
+    static func openSystemSettings() {
+        SMAppService.openSystemSettingsLoginItems()
+    }
+
     static func set(_ enabled: Bool) throws {
         if enabled {
             try SMAppService.mainApp.register()

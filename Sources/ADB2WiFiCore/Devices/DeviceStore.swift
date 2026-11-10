@@ -60,6 +60,26 @@ public final class DeviceStore {
 
     public var port: Int { settings.port }
     public var connectedCount: Int { devices.filter(\.isWiFiConnected).count }
+    public var autoReconnect: Bool { settings.autoReconnect }
+
+    /// Remembered endpoint candidates, oldest order is not significant; sort for determinism.
+    public var rememberedConnections: [(identity: DeviceIdentity, endpoint: String)] {
+        settings.rememberedEndpoints
+            .sorted { $0.key < $1.key }
+            .map { (DeviceIdentity(serialNo: $0.key), $0.value) }
+    }
+
+    public func rememberedEndpoint(for identity: DeviceIdentity) -> String? {
+        settings.rememberedEndpoint(for: identity.serialNo)
+    }
+
+    public func rememberEndpoint(_ endpoint: String, for identity: DeviceIdentity) {
+        settings.remember(endpoint: endpoint, for: identity.serialNo)
+    }
+
+    public func forgetEndpoint(for identity: DeviceIdentity) {
+        settings.forgetEndpoint(for: identity.serialNo)
+    }
 
     public convenience init(settings: AppSettings, runner: any CommandRunning) {
         self.init(

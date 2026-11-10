@@ -49,3 +49,56 @@ func emptyStoredPathIsIgnored() {
     let settings = AppSettings(storage: storage)
     #expect(settings.adbPathOverride == nil)
 }
+
+@Test @MainActor
+func autoReconnectDefaultsOnAndPersists() {
+    let storage = InMemoryDefaults()
+    let settings = AppSettings(storage: storage)
+    #expect(settings.autoReconnect)
+
+    settings.autoReconnect = false
+    #expect(AppSettings(storage: storage).autoReconnect == false)
+
+    settings.autoReconnect = true
+    #expect(AppSettings(storage: storage).autoReconnect)
+}
+
+@Test @MainActor
+func rememberedEndpointsPersistAndForget() {
+    let storage = InMemoryDefaults()
+    let settings = AppSettings(storage: storage)
+    #expect(settings.rememberedEndpoints.isEmpty)
+
+    settings.remember(endpoint: "192.0.2.42:5555", for: "TEST00000001")
+    settings.remember(endpoint: "192.0.2.43:5555", for: "TEST00000002")
+    #expect(settings.rememberedEndpoint(for: "TEST00000001") == "192.0.2.42:5555")
+
+    let restored = AppSettings(storage: storage)
+    #expect(restored.rememberedEndpoints.count == 2)
+    #expect(restored.rememberedEndpoint(for: "TEST00000002") == "192.0.2.43:5555")
+
+    restored.forgetEndpoint(for: "TEST00000001")
+    #expect(restored.rememberedEndpoint(for: "TEST00000001") == nil)
+    #expect(AppSettings(storage: storage).rememberedEndpoints.count == 1)
+
+    restored.clearRememberedEndpoints()
+    #expect(restored.rememberedEndpoints.isEmpty)
+    #expect(AppSettings(storage: storage).rememberedEndpoints.isEmpty)
+}
+
+@Test @MainActor
+func rememberedEndpointsAreCapped() {
+    let settings = AppSettings(storage: InMemoryDefaults())
+    for index in 0..<25 {
+        settings.remember(endpoint: "192.0.2.\(index):5555", for: "TEST\(index)")
+    }
+    #expect(settings.rememberedEndpoints.count == 20)
+}
+
+@Test @MainActor
+func emptyRememberedValuesAreIgnored() {
+    let settings = AppSettings(storage: InMemoryDefaults())
+    settings.remember(endpoint: "", for: "TEST00000001")
+    settings.remember(endpoint: "192.0.2.42:5555", for: "")
+    #expect(settings.rememberedEndpoints.isEmpty)
+}

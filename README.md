@@ -25,7 +25,9 @@ remote serial number before declaring success. No root, no scripts, no accounts.
 
 - **Native and quiet** — SwiftUI, zero third-party dependencies, no Dock icon, no main window.
 - **Private by default** — no telemetry, no cloud, no API keys. Everything stays on your Mac.
-- **Hard to get wrong** — clear setup, bounded retries, identity verification, and a copy-ready `adb connect` command.
+- **Remembers your phone** — opt-out auto-reconnect tries the last verified endpoint on launch or wake.
+- **Quick actions** — right-click the menu-bar icon for Settings, Refresh, Launch at Login, or Quit.
+- **Hard to get wrong** — clear setup, bounded retries, identity verification, copy-ready `adb` commands, and a one-click **Shell**.
 - **Low overhead** — adaptive polling, one coalesced `adb devices` call, and no subprocesses while the Mac sleeps.
 
 ## Install
@@ -70,6 +72,8 @@ You only need the Swift toolchain from Xcode or the Command Line Tools.
 2. Plug in USB and tap **Allow** on the phone.
 3. Open ADB2WiFi and press **Connect over Wi-Fi**.
 4. When the card turns green, unplug USB. The ADB connection stays up.
+5. Next time, ADB2WiFi can reconnect automatically. Use **Shell** on a connected card
+   for a Terminal session, or right-click the menu-bar icon for quick actions.
 
 If ADB is missing, the popover becomes a setup screen with a path picker and a
 copy-ready Homebrew command. No terminal required.
@@ -83,6 +87,7 @@ Everything is in the popover's **Settings** pane.
 | **ADB path** | Auto-detects, or pick any `adb` executable. |
 | **Port** | Port used by `adb tcpip` and the generated endpoint. Default `5555`. |
 | **Launch at login** | Starts ADB2WiFi quietly when you log in. |
+| **Reconnect remembered phones** | Tries the last verified Wi-Fi endpoint on launch or wake. On by default. |
 | **Copy diagnostics** | Copies a redacted support report (no serials, IPs, or usernames). |
 
 <p align="center"><img src="docs/screenshot-settings.png" width="300" alt="ADB2WiFi settings pane"></p>
@@ -118,13 +123,14 @@ chosen in Settings. That is the whole setup.
 
 The app never runs `adb kill-server`, never uses a shell to build commands, and
 keeps in-flight work alive when you close the popover. **Quit** does not tear down
-an established Wi-Fi connection.
+an established Wi-Fi connection. Explicit **Disconnect** forgets the remembered endpoint.
 
 > Wi-Fi ADB is unencrypted. Use it only on a trusted network.
 
 ## Privacy
 
-- No analytics, telemetry, accounts, or network calls other than to your phone over ADB.
+- No analytics, telemetry, accounts, or cloud calls. The only network traffic is ADB to your phone.
+- Remembered serial/endpoint pairs stay in local `UserDefaults` and can be cleared in Settings.
 - Serial numbers and IP addresses are logged as private values in the unified log.
 - **Copy diagnostics** redacts your home directory and contains no device identifiers.
 - See [SECURITY.md](SECURITY.md) for the full data story.
@@ -158,7 +164,7 @@ connect start manual=false port=5555
 
 ```sh
 swift build                        # debug build
-bash Scripts/test.sh               # 132 Swift Testing tests
+bash Scripts/test.sh               # 140 Swift Testing tests
 bash Scripts/package-app.sh        # arm64 app in dist/
 bash Scripts/package-app.sh --universal
 bash Scripts/release.sh            # universal zip + SHA-256

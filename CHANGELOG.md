@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0 — 2026-11-10
+
+### Added
+
+- **Auto-reconnect** — remembers the last verified endpoint per phone and quietly tries it
+  on launch or wake. Opt out, or clear the remembered list, in Settings. An explicit
+  **Disconnect** forgets that endpoint.
+- **Right-click status-item menu** — Open, Settings, Refresh Devices, Launch at Login,
+  and Quit without opening the popover first.
+- **Open Shell** — connected cards can open Terminal already attached to the phone. If
+  macOS denies Terminal automation, the command is copied instead.
+- Launch-at-login approval guidance: when macOS requires approval, Settings shows an
+  **Open** button for the Login Items pane.
+
+### Changed
+
+- The connected-card action row now shows `Copy adb command`, `Shell`, and `Disconnect`.
+
 ## 0.2.1 — 2026-11-10
 
 ### Fixed

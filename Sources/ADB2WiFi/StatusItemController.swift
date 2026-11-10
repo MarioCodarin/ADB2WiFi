@@ -10,6 +10,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let store: DeviceStore
     private let coordinator: ConnectionCoordinator
     private let onQuit: () -> Void
+    private let popoverModel = PopoverModel(showingSettings: DebugFlags.showSettingsOnLaunch)
     private var popover: NSPopover?
 
     init(
@@ -36,6 +37,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         button.setAccessibilityLabel("ADB2WiFi")
         button.target = self
         button.action = #selector(togglePopover(_:))
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
     }
 
     /// The popover, and its SwiftUI view graph, is created on first use. Launching at login
@@ -45,6 +47,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         let root = PopoverRootView(
             settings: settings,
             store: store,
+            model: popoverModel,
             coordinator: coordinator,
             onQuit: onQuit,
             onChooseADB: { [weak self] in self?.chooseADB() }
@@ -106,6 +109,80 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         }
     }
 
+    private func openPopover() {
+        guard let button = statusItem.button else { return }
+        let popover = makePopover()
+        if popover.isShown { return }
+        NSApp.activate()
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
+    }
+
+    private func showContextMenu() {
+        guard let button = statusItem.button else { return }
+        let menu = NSMenu()
+
+        let open = menu.addItem(withTitle: "Open ADB2WiFi", action: #selector(menuOpen), keyEquivalent: "")
+        open.target = self
+        let settingsItem = menu.addItem(withTitle: "Settings…", action: #selector(menuSettings), keyEquivalent: ",")
+        settingsItem.target = self
+
+        menu.addItem(.separator())
+        let refresh = menu.addItem(withTitle: "Refresh Devices", action: #selector(menuRefresh), keyEquivalent: "r")
+        refresh.target = self
+
+        menu.addItem(.separator())
+        let loginTitle = LaunchAtLogin.requiresApproval ? "Approve Launch at Login…" : "Launch at Login"
+        let login = menu.addItem(withTitle: loginTitle, action: #selector(menuToggleLaunchAtLogin), keyEquivalent: "")
+        login.target = self
+        login.state = (LaunchAtLogin.isEnabled || LaunchAtLogin.requiresApproval) ? .on : .off
+
+        menu.addItem(.separator())
+        let quit = menu.addItem(withTitle: "Quit ADB2WiFi", action: #selector(menuQuit), keyEquivalent: "q")
+        quit.target = self
+
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
+    }
+
+    @objc
+    private func menuOpen() {
+        popoverModel.showingSettings = false
+        openPopover()
+    }
+
+    @objc
+    private func menuSettings() {
+        popoverModel.showingSettings = true
+        openPopover()
+    }
+
+    @objc
+    private func menuRefresh() {
+        Task { await store.refresh(userInitiated: true) }
+    }
+
+    @objc
+    private func menuToggleLaunchAtLogin() {
+        if LaunchAtLogin.requiresApproval {
+            LaunchAtLogin.openSystemSettings()
+            return
+        }
+        do {
+            try LaunchAtLogin.set(!LaunchAtLogin.isEnabled)
+            if LaunchAtLogin.requiresApproval {
+                LaunchAtLogin.openSystemSettings()
+            }
+        } catch {
+            Log.settings.error("launch at login failed error=\(String(describing: error), privacy: .private)")
+            NSSound.beep()
+        }
+    }
+
+    @objc
+    private func menuQuit() {
+        onQuit()
+    }
+
     #if DEBUG
     /// Debug-only: show the popover without a physical click, for screenshots and UI QA.
     func showPopoverForDebug() {
@@ -121,11 +198,17 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     @objc
     private func togglePopover(_ sender: Any?) {
         guard let button = statusItem.button else { return }
+        if NSApp.currentEvent?.type == .rightMouseUp || NSApp.currentEvent?.type == .rightMouseDown {
+            showContextMenu()
+            return
+        }
+
         let popover = makePopover()
         if popover.isShown {
             popover.performClose(sender)
             return
         }
+        popoverModel.showingSettings = false
         NSApp.activate()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()

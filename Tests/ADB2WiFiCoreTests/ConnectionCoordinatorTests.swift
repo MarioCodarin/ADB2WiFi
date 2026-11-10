@@ -64,11 +64,13 @@ private struct ExistsSet: FileChecking {
 private func makeHarness(
     runner: FakeCommandRunner,
     clock: any Sleeping = ImmediateClock(),
-    port: Int = 5555
+    port: Int = 5555,
+    configure: (AppSettings) -> Void = { _ in }
 ) -> (DeviceStore, ConnectionCoordinator) {
     let settings = AppSettings(storage: InMemoryDefaults())
     settings.adbPathOverride = fakeADB
     settings.port = port
+    configure(settings)
     let store = DeviceStore(
         settings: settings,
         runner: runner,
@@ -174,6 +176,7 @@ func oneClickConnectsAndVerifiesIdentity() async {
     let device = store.device(for: pixel.identity)!
     #expect(device.isWiFiConnected)
     #expect(device.operation == .readyToUnplug)
+    #expect(store.rememberedEndpoint(for: pixel.identity) == "192.0.2.42:5555")
     #expect(runner.tcpipSerials == ["TEST00000001"])
     #expect(runner.connectEndpoints == ["192.0.2.42:5555", "192.0.2.42:5555"])
 }
@@ -413,6 +416,7 @@ func disconnectRemovesOnlyThatEndpoint() async {
     var pixelDevice = store.device(for: pixel.identity)!
     pixelDevice.network = Transport(serial: "192.0.2.42:5555", state: .device, verified: true)
     store.update(pixelDevice)
+    store.rememberEndpoint("192.0.2.42:5555", for: pixel.identity)
     var samsungDevice = store.device(for: samsung.identity)!
     samsungDevice.network = Transport(serial: "192.0.2.43:5555", state: .device, verified: true)
     store.update(samsungDevice)
@@ -423,6 +427,7 @@ func disconnectRemovesOnlyThatEndpoint() async {
     #expect(!runner.invokedCommands.contains { $0.contains("kill-server") })
     #expect(store.device(for: pixel.identity)?.isWiFiConnected == false)
     #expect(store.device(for: samsung.identity)?.isWiFiConnected == true)
+    #expect(store.rememberedEndpoint(for: pixel.identity) == nil)
     #expect(
         ConnectionCoordinator.disconnectHelpText
             == "Disconnects this computer from the phone’s Wi-Fi ADB endpoint. It does not disable the phone’s TCP listener."
@@ -559,4 +564,77 @@ func customPortIsUsedForTcpipAndEndpoint() async {
     #expect(device.network?.serial == "192.0.2.42:6000")
     #expect(runner.invokedCommands.contains(["-s", "TEST00000001", "tcpip", "6000"]))
     #expect(runner.connectEndpoints == ["192.0.2.42:6000"])
+}
+
+
+private let networkOnlyListing = """
+List of devices attached
+192.0.2.42:5555      device product:shiba model:Pixel_8
+"""
+
+@Test @MainActor
+func autoReconnectConnectsRememberedEndpoint() async {
+    let runner = FakeCommandRunner(handlers: [
+        { _ in ok("connected to 192.0.2.42:5555\n") },
+        { _ in ok("TEST00000001\n") },
+        { _ in ok(networkOnlyListing) },
+        { _ in ok("TEST00000001\n") },
+        { _ in ok("Pixel 8\n") },
+    ])
+    let (store, coordinator) = makeHarness(runner: runner)
+    store.rememberEndpoint("192.0.2.42:5555", for: pixel.identity)
+    #expect(store.devices.isEmpty)
+
+    await coordinator.reconnectRememberedEndpoints()
+
+    let device = store.device(for: pixel.identity)
+    #expect(device?.isWiFiConnected == true)
+    #expect(device?.network?.serial == "192.0.2.42:5555")
+    #expect(runner.connectEndpoints == ["192.0.2.42:5555"])
+    #expect(store.globalError == nil)
+}
+
+@Test @MainActor
+func autoReconnectCanBeDisabled() async {
+    let runner = FakeCommandRunner()
+    let (store, coordinator) = makeHarness(runner: runner) { settings in
+        settings.autoReconnect = false
+    }
+    store.rememberEndpoint("192.0.2.42:5555", for: pixel.identity)
+
+    await coordinator.reconnectRememberedEndpoints()
+
+    #expect(runner.calls.isEmpty)
+    #expect(store.devices.isEmpty)
+}
+
+@Test @MainActor
+func autoReconnectSkipsAStaleAddressWithoutSurfacingAnError() async {
+    let runner = FakeCommandRunner(handlers: [
+        { _ in ok("connected to 192.0.2.42:5555\n") },
+        { _ in ok("OTHER_DEVICE\n") },
+    ])
+    let (store, coordinator) = makeHarness(runner: runner)
+    store.rememberEndpoint("192.0.2.42:5555", for: pixel.identity)
+
+    await coordinator.reconnectRememberedEndpoints()
+
+    #expect(store.devices.isEmpty)
+    #expect(store.globalError == nil)
+    #expect(runner.connectEndpoints == ["192.0.2.42:5555"])
+}
+
+@Test @MainActor
+func autoReconnectIgnoresDevicesThatAreAlreadyOnWiFi() async {
+    let runner = FakeCommandRunner()
+    let (store, coordinator) = makeHarness(runner: runner)
+    var device = Device.testUSBAuthorized
+    device.usb = nil
+    device.network = Transport(serial: "192.0.2.42:5555", state: .device, verified: true)
+    store.update(device)
+    store.rememberEndpoint("192.0.2.42:5555", for: pixel.identity)
+
+    await coordinator.reconnectRememberedEndpoints()
+
+    #expect(runner.calls.isEmpty)
 }

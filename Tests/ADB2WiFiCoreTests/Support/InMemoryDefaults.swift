@@ -12,6 +12,10 @@ final class InMemoryDefaults: DefaultsStorage {
         values[defaultName] as? Int ?? 0
     }
 
+    func object(forKey defaultName: String) -> Any? {
+        values[defaultName]
+    }
+
     func set(_ value: Any?, forKey defaultName: String) {
         if let value {
             values[defaultName] = value

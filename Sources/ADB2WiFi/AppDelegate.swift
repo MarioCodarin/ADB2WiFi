@@ -4,6 +4,7 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var store: DeviceStore?
+    private var coordinator: ConnectionCoordinator?
     private var statusItemController: StatusItemController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -33,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let coordinator = ConnectionCoordinator(store: store, clientProvider: { store.makeClient() })
 
         self.store = store
+        self.coordinator = coordinator
 
         statusItemController = StatusItemController(
             settings: settings,
@@ -48,10 +50,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             store.replaceDevicesForPreview(FixtureDevices.catalog)
             Log.app.notice("fixtures enabled; polling disabled")
         } else {
-            store.start()
+            startLive(store: store, coordinator: coordinator)
         }
         #else
-        store.start()
+        startLive(store: store, coordinator: coordinator)
         #endif
 
         Task { await store.refreshVersion() }
@@ -92,6 +94,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleDidWake(_ notification: Notification) {
         Log.app.notice("system woke; resuming polling")
         store?.start()
+        guard let coordinator else { return }
+        Task {
+            // Give Wi-Fi a moment to come back after wake before retrying.
+            try? await Task.sleep(for: .seconds(2))
+            await coordinator.reconnectRememberedEndpoints()
+        }
+    }
+
+    private func startLive(store: DeviceStore, coordinator: ConnectionCoordinator) {
+        store.start()
+        Task { await coordinator.reconnectRememberedEndpoints() }
     }
 
     private func quit() {

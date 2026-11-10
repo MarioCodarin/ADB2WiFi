@@ -12,6 +12,15 @@ visible state that a non-expert never has to guess what went wrong.
 4. **Stay quiet.** No Dock icon, no notifications unless asked, no polling you can feel.
 5. **Local-first.** No account, no cloud, no telemetry.
 
+## Shipped in 0.3.0
+
+- Opt-out auto-reconnect of the last verified endpoint on launch and wake.
+- Remembered endpoints are local, capped, and clearable; explicit Disconnect forgets.
+- Right-click status-item menu: Open, Settings, Refresh, Launch at Login, Quit.
+- **Shell** action on connected cards, with a copy-command fallback if Terminal
+  automation is denied.
+- Launch-at-login approval guidance with a direct Login Items button.
+
 ## Shipped in 0.2.0
 
 - Setup screen with ADB picker, Homebrew command, and auto-detection.
@@ -29,13 +38,10 @@ Scored by user value vs. effort. This is a brainstorm, not a commitment.
 
 | Idea | Value | Effort | Notes |
 |---|---|---|---|
-| **Auto-reconnect last endpoint** | High | Medium | Remember the last `ip:port` per identity and try it on launch. Needs a "forget" control and a visible state. |
 | **Android 11+ wireless debugging pairing** | High | High | `adb pair` flow with a pairing code / QR. Different UX from USB-initiated `tcpip`; should be a second card action. |
-| **Open shell action** | High | Low | A "Shell" button that opens Terminal at `adb -s <endpoint> shell`. Needs careful quoting and a Terminal preference. |
 | **Notifications on ready** | Medium | Low | One notification when a connection becomes verified, especially if the popover is closed. Must be opt-in. |
-| **Last-connected device memory** | Medium | Low | Show a "Recently connected" card even when unplugged, with Reconnect. |
+| **Recently connected card** | Medium | Low | Show a remembered phone even when it is not currently reachable, with Reconnect and Forget actions. |
 | **Multiple ports / profiles** | Medium | Medium | Useful for emulators and unusual devices. Keep the default 5555 and add a per-device override. |
-| **Menu-bar right-click menu** | Medium | Low | Settings, Refresh, Launch at login, Quit without opening the popover. |
 | **Localization** | Medium | Medium | The UI copy is short and centralized in `AppError` / `SetupView`; good candidate for `.strings`. |
 | **Homebrew cask** | Medium | Low | Once notarized. A cask makes `brew install --cask adb2wifi` possible. |
 | **Notarized release + Sparkle updates** | Medium | Medium | Requires a Developer ID. Removes the right-click-Open caveat. |

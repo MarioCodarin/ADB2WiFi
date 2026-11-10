@@ -8,6 +8,7 @@ struct DeviceCardView: View {
     var onContinue: (String) -> Void = { _ in }
     var onDisconnect: () -> Void = {}
     var onCancel: () -> Void = {}
+    var onOpenShell: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focusedControl: CardFocus?
@@ -232,8 +233,16 @@ struct DeviceCardView: View {
                 CopyButton(
                     text: Endpoint.connectCommand(endpoint),
                     label: "Copy adb command",
-                    systemImage: "terminal"
+                    systemImage: "doc.on.doc"
                 )
+                Button(action: onOpenShell) {
+                    Label("Shell", systemImage: "terminal")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Open Terminal attached to this phone.")
+                .accessibilityHint("Opens a Terminal window with an adb shell for this phone.")
             }
             Spacer(minLength: 4)
             Button("Disconnect", action: onDisconnect)

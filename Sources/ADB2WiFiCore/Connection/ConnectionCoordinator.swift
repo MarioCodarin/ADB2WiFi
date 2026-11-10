@@ -13,7 +13,7 @@ public final class ConnectionCoordinator {
     private let clientProvider: @MainActor () -> ADBClient?
 
     private var connectingIdentities: Set<DeviceIdentity> = []
-    private var lastAddressByIdentity: [DeviceIdentity: String] = [:]
+    private var isReconnectingRemembered = false
 
     private var port: Int { store.port }
 
@@ -76,7 +76,7 @@ public final class ConnectionCoordinator {
 
     public func disconnect(identity: DeviceIdentity) async {
         guard var device = store.device(for: identity) else { return }
-        let endpoint = device.network?.serial ?? lastAddressByIdentity[identity]
+        let endpoint = device.network?.serial ?? store.rememberedEndpoint(for: identity)
         guard let endpoint else {
             Log.connection.debug("disconnect ignored: no endpoint")
             return
@@ -96,13 +96,64 @@ public final class ConnectionCoordinator {
         device.network = nil
         device.operation = .idle
         store.update(device)
-        lastAddressByIdentity[identity] = nil
+        store.forgetEndpoint(for: identity)
         Log.connection.notice("disconnect ok")
     }
 
-    /// Re-discovers the Wi-Fi IPv4 over USB. `lastAddressByIdentity` is disconnect-only.
+    /// Re-discovers the Wi-Fi IPv4 over USB.
     public func retry(identity: DeviceIdentity) async {
         await connect(identity: identity)
+    }
+
+    /// Quietly tries endpoints remembered from previous verified sessions. Runs once on
+    /// launch and on wake; failures are logged but never surfaced as a global error.
+    public func reconnectRememberedEndpoints() async {
+        guard !isReconnectingRemembered else { return }
+        guard store.autoReconnect else {
+            Log.connection.debug("auto-reconnect disabled")
+            return
+        }
+        guard connectingIdentities.isEmpty else { return }
+        guard let client = clientProvider() else { return }
+        let candidates = store.rememberedConnections
+        guard !candidates.isEmpty else { return }
+
+        isReconnectingRemembered = true
+        defer { isReconnectingRemembered = false }
+
+        Log.connection.notice("auto-reconnect start candidates=\(candidates.count, privacy: .public)")
+        let deadline = ContinuousClock.now + .seconds(6)
+
+        for (identity, endpoint) in candidates {
+            if ContinuousClock.now >= deadline { break }
+            if connectingIdentities.contains(identity) { continue }
+            if let device = store.device(for: identity) {
+                if device.isWiFiConnected || device.usb != nil { continue }
+            }
+
+            do {
+                try await client.connect(endpoint: endpoint, timeout: .seconds(3))
+                let remoteSerial = try await client.serialNo(serial: endpoint)
+                guard remoteSerial == identity.serialNo else {
+                    Log.connection.notice("auto-reconnect skipped wrong device")
+                    continue
+                }
+                store.rememberEndpoint(endpoint, for: identity)
+                await store.refresh()
+                // A poll may already have been in flight when the endpoint came up.
+                if store.device(for: identity)?.network?.serial != endpoint {
+                    await store.refresh()
+                }
+                Log.connection.notice("auto-reconnect ok")
+            } catch is CancellationError {
+                return
+            } catch {
+                Log.connection.info(
+                    "auto-reconnect skipped error=\(String(describing: error), privacy: .private)"
+                )
+            }
+        }
+        Log.connection.debug("auto-reconnect finished")
     }
 
     /// Clears a prompt or failure. A running connection is not interruptible from the UI.
@@ -151,7 +202,6 @@ public final class ConnectionCoordinator {
             return
         }
 
-        lastAddressByIdentity[identity] = endpoint
         Log.connection.debug("endpoint selected endpoint=\(endpoint, privacy: .private)")
 
         try await ensureUSBPresent(serial: usbSerial, client: client)
@@ -174,6 +224,7 @@ public final class ConnectionCoordinator {
             device.network = Transport(serial: endpoint, state: .device, verified: true)
             device.operation = .readyToUnplug
         }
+        store.rememberEndpoint(endpoint, for: identity)
     }
 
     /// Drop the foreign `adb connect` so Retry cannot hit `already connected to`.

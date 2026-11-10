@@ -19,13 +19,14 @@ There are no third-party dependencies. Swift 6 language mode, macOS 14+.
 SwiftUI `App`/`Settings` scene was removed because newer SDKs create a hidden
 Settings window for it; the whole UI is hosted in an `NSPopover` instead.
 
-The app keeps four long-lived objects alive. The `StatusItemController` retains
-`AppSettings`, `DeviceStore`, and `ConnectionCoordinator`:
+The app keeps five long-lived objects alive. The `StatusItemController` owns the
+popover model and retains the settings, store, and coordinator:
 
-- **`AppSettings`** — `adbPathOverride` and `port`, persisted in `UserDefaults`.
+- **`AppSettings`** — `adbPathOverride`, `port`, `autoReconnect`, and remembered endpoints, persisted in `UserDefaults`.
 - **`DeviceStore`** — polling, identity/model caches, merged device list.
 - **`ConnectionCoordinator`** — one-click connect, retry, verify, disconnect, cancel.
-- **`StatusItemController`** — status item, popover lifecycle, file picker, icon state.
+- **`StatusItemController`** — status item, popover lifecycle, context menu, file picker, icon state.
+- **`PopoverModel`** — the one piece of UI state shared with the status-item menu (settings visibility).
 
 They live for the app's lifetime, so closing the popover never cancels work.
 
@@ -68,6 +69,22 @@ Invariants:
 - USB removal before `tcpip` fails; after `tcpip` the daemon restart is expected.
 - On timeout: SIGTERM, then SIGINT, then SIGKILL as the last resort.
 - Quit stops polling but leaves established ADB endpoints alive.
+
+## Auto-reconnect
+
+Successful connections store `serialNo -> ip:port` in local `UserDefaults`. On launch
+and on wake, `ConnectionCoordinator.reconnectRememberedEndpoints()` quietly tries each
+remembered endpoint that is not already connected or attached over USB:
+
+```
+adb connect <endpoint> (3 s timeout)
+  → adb shell getprop ro.serialno must match
+  → refresh the device list
+```
+
+It has a 6-second total budget, skips anything already on Wi-Fi, and never surfaces a
+failure as a global error. Explicit **Disconnect** removes the entry; Settings has a
+Clear button. The list is capped at 20 and diagnostics never include it.
 
 ## Polling and resource use
 
@@ -113,13 +130,30 @@ It never contains serial numbers or IP addresses.
 
 `AppSettings` uses a `DefaultsStorage` protocol so tests can inject memory-backed
 defaults. `port` is clamped to `1...65535`; changing it affects the next connection.
+`autoReconnect` defaults to on. Remembered endpoints are a JSON `serial -> endpoint`
+map, capped at 20, cleared from Settings, and removed by an explicit Disconnect.
 
 `ADBExecutable.resolve` checks, in order: the Settings override, `$ADB2WIFI_ADB_PATH`,
 Homebrew, `/usr/local`, MacPorts, the Android SDK in the home folder,
 `$ANDROID_HOME` / `$ANDROID_SDK_ROOT`, then every `PATH` directory.
 
 `LaunchAtLogin` wraps `SMAppService.mainApp`. The app must live in `/Applications`
-for login-item registration to be meaningful.
+for login-item registration to be meaningful. If macOS returns `.requiresApproval`,
+Settings shows a direct button to the Login Items pane instead of pretending the
+toggle is already active.
+
+## Status-item menu
+
+The status item accepts left and right clicks. Right-click builds an `NSMenu` with
+Open, Settings, Refresh Devices, Launch at Login, and Quit. `PopoverModel` lets the
+menu open Settings directly without recreating the popover. Left-click always opens
+the device list.
+
+## Terminal shell
+
+A connected card can open Terminal with `adb -s <endpoint> shell`. The command is
+built from quoted arguments; if macOS denies Terminal automation, the app copies the
+exact command to the clipboard and explains how to paste it.
 
 ## Testing and toolchain
 

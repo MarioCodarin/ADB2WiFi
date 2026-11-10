@@ -15,6 +15,7 @@ enum SnapshotRenderer {
         let root = PopoverRootView(
             settings: settings,
             store: store,
+            model: PopoverModel(),
             coordinator: coordinator,
             onQuit: {},
             onChooseADB: {}

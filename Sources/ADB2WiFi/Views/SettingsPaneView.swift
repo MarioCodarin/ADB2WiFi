@@ -7,7 +7,7 @@ struct SettingsPaneView: View {
     var onChooseADB: () -> Void
     var onDone: () -> Void
 
-    @ViewState private var launchAtLogin = LaunchAtLogin.isEnabled
+    @ViewState private var launchAtLogin = LaunchAtLogin.isEnabled || LaunchAtLogin.requiresApproval
     @ViewState private var launchAtLoginError: String?
 
     private var resolvedADB: URL? { store.resolvedExecutable() }
@@ -38,7 +38,7 @@ struct SettingsPaneView: View {
             await store.refreshVersion()
         }
         .onAppear {
-            launchAtLogin = LaunchAtLogin.isEnabled
+            launchAtLogin = LaunchAtLogin.isEnabled || LaunchAtLogin.requiresApproval
         }
     }
 
@@ -159,17 +159,17 @@ struct SettingsPaneView: View {
     }
 
     private var generalSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             SectionLabel(text: "General")
             Toggle("Launch at login", isOn: Binding(
                 get: { launchAtLogin },
                 set: { newValue in
                     do {
                         try LaunchAtLogin.set(newValue)
-                        launchAtLogin = LaunchAtLogin.isEnabled
+                        launchAtLogin = LaunchAtLogin.isEnabled || LaunchAtLogin.requiresApproval
                         launchAtLoginError = nil
                     } catch {
-                        launchAtLogin = LaunchAtLogin.isEnabled
+                        launchAtLogin = LaunchAtLogin.isEnabled || LaunchAtLogin.requiresApproval
                         launchAtLoginError = error.localizedDescription
                     }
                 }
@@ -184,6 +184,43 @@ struct SettingsPaneView: View {
                     .font(.system(size: 9))
                     .foregroundStyle(Theme.warning)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if LaunchAtLogin.requiresApproval {
+                HStack(spacing: 6) {
+                    Text("Approve in System Settings › General › Login Items.")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                    Spacer()
+                    Button("Open") { LaunchAtLogin.openSystemSettings() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Theme.accent)
+                }
+            }
+
+            Toggle("Reconnect remembered phones", isOn: $settings.autoReconnect)
+                .font(.system(size: 11))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .accessibilityHint("Tries the last verified Wi-Fi endpoint when ADB2WiFi launches or wakes.")
+
+            if settings.rememberedEndpoints.isEmpty {
+                Text("No remembered endpoints yet. Connect a phone over Wi-Fi once.")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+            } else {
+                HStack(spacing: 6) {
+                    Text("\(settings.rememberedEndpoints.count) remembered endpoint\(settings.rememberedEndpoints.count == 1 ? "" : "s")")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                    Spacer()
+                    Button("Clear") { settings.clearRememberedEndpoints() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Theme.accent)
+                        .accessibilityLabel("Clear remembered endpoints")
+                }
             }
         }
     }
